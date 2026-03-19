@@ -211,6 +211,10 @@ function clampToVirginia(viewState, bounds) {
       })
     ];
 
+    // Expose GHG data for the dashboard panel
+    window.__ghgFeatures = ghgFeatures;
+    window.dispatchEvent(new Event('ghg-data-ready'));
+
     new DeckGL({
       container: 'app',
       mapStyle: null,
