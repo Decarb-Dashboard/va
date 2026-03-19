@@ -211,6 +211,10 @@ function clampToVirginia(viewState, bounds) {
       })
     ];
 
+    // Expose GHG data for the dashboard panel
+    window.__ghgFeatures = ghgFeatures;
+    window.dispatchEvent(new Event('ghg-data-ready'));
+
     new DeckGL({
       container: 'app',
       mapStyle: null,
@@ -219,12 +223,21 @@ function clampToVirginia(viewState, bounds) {
       initialViewState: viewState,
       onViewStateChange: ({viewState: next}) => clampToVirginia(next, manifest.bounds),
       layers,
+      onClick: ({object, layer}) => {
+        if (!object || !layer) return;
+        if (layer.id === 'ghg-facilities') {
+          const props = object.properties || {};
+          if (window.__onFacilityClick) {
+            window.__onFacilityClick(props.facility_name, props.subparts);
+          }
+        }
+      },
       getTooltip: ({object, layer}) => {
         if (!object) return null;
         if (layer.id === 'ghg-facilities') {
           const props = object.properties || {};
           return {
-            html: `<strong>${props.facility_name || 'Facility'}</strong><br/>Subparts: ${props.subparts || 'N/A'}<br/>GHG: ${formatTons(props.ghg_quantity_metric_tons_co2e)} tCO2e`
+            html: `<strong>${props.facility_name || 'Facility'}</strong><br/>Subparts: ${props.subparts || 'N/A'}<br/>GHG: ${formatTons(props.ghg_quantity_metric_tons_co2e)} tCO2e<br/><em style="color:#7a8a9e;font-size:10px">Click for emissions history</em>`
           };
         }
         if (layer.id === 'boundary') {
