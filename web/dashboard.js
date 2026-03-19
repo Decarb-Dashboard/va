@@ -233,12 +233,174 @@ function buildDistributionChart(features) {
   });
 }
 
+// --- Facility timeline modal ---
+
+// Parse CSV text into array of objects
+function parseCSV(text) {
+  const lines = text.split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    // Handle commas inside quoted fields
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    for (let c = 0; c < line.length; c++) {
+      if (line[c] === '"') {
+        inQuotes = !inQuotes;
+      } else if (line[c] === ',' && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += line[c];
+      }
+    }
+    values.push(current.trim());
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = values[idx] || ''; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+let allYearsData = null;
+let timelineChart = null;
+
+async function loadAllYearsData() {
+  const resp = await fetch('../ghg-data/flight_cleaned_va_all_years.csv');
+  const text = await resp.text();
+  allYearsData = parseCSV(text);
+}
+
+function openFacilityModal(facilityName, subparts) {
+  if (!allYearsData) return;
+
+  const modal = document.getElementById('facility-modal');
+  const titleEl = document.getElementById('modal-title');
+  const subtitleEl = document.getElementById('modal-subtitle');
+  const statsEl = document.getElementById('modal-stats');
+
+  // Find all records for this facility across years
+  const records = allYearsData
+    .filter(r => r.facility_name === facilityName)
+    .map(r => ({
+      year: parseInt(r.reporting_year, 10),
+      ghg: parseFloat(r.ghg_quantity_metric_tons_co2e) || 0
+    }))
+    .sort((a, b) => a.year - b.year);
+
+  if (records.length === 0) {
+    // Try partial match if exact match fails
+    const nameLower = facilityName.toLowerCase();
+    const partial = allYearsData
+      .filter(r => r.facility_name && r.facility_name.toLowerCase().includes(nameLower.split(' ')[0]))
+      .map(r => ({
+        year: parseInt(r.reporting_year, 10),
+        ghg: parseFloat(r.ghg_quantity_metric_tons_co2e) || 0,
+        name: r.facility_name
+      }));
+    if (partial.length === 0) return;
+  }
+
+  titleEl.textContent = facilityName;
+  subtitleEl.textContent = `Sector: ${classifyFacility(subparts)} · Subparts: ${subparts || 'N/A'}`;
+
+  // Compute stats
+  const years = records.map(r => r.year);
+  const ghgValues = records.map(r => r.ghg);
+  const latest = ghgValues[ghgValues.length - 1] || 0;
+  const peak = Math.max(...ghgValues);
+  const peakYear = years[ghgValues.indexOf(peak)];
+  const first = ghgValues[0] || 0;
+  const changePct = first > 0 ? (((latest - first) / first) * 100).toFixed(1) : 'N/A';
+
+  statsEl.innerHTML = `
+    <div class="modal-stat">Latest: <strong>${(latest / 1000).toLocaleString(undefined, {maximumFractionDigits: 1})} kt CO2e</strong></div>
+    <div class="modal-stat">Peak: <strong>${(peak / 1000).toLocaleString(undefined, {maximumFractionDigits: 1})} kt</strong> (${peakYear})</div>
+    <div class="modal-stat">Change: <strong>${changePct === 'N/A' ? changePct : changePct + '%'}</strong> (${years[0]}–${years[years.length - 1]})</div>
+  `;
+
+  // Destroy previous chart
+  if (timelineChart) {
+    timelineChart.destroy();
+    timelineChart = null;
+  }
+
+  const canvas = document.getElementById('chart-facility-timeline');
+  timelineChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: years,
+      datasets: [{
+        data: ghgValues.map(v => v / 1000),
+        borderColor: '#4dd0e1',
+        backgroundColor: 'rgba(77, 208, 225, 0.1)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#4dd0e1',
+        pointBorderColor: '#141a24',
+        pointBorderWidth: 2,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.raw.toLocaleString(undefined, {maximumFractionDigits: 1})} kt CO2e`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(162,186,212,0.08)' },
+          ticks: { color: '#7a8a9e', font: { size: 11 } },
+          title: { display: true, text: 'Year', color: '#7a8a9e', font: { size: 10 } }
+        },
+        y: {
+          grid: { color: 'rgba(162,186,212,0.08)' },
+          ticks: { color: '#7a8a9e', font: { size: 10 }, callback: v => v.toLocaleString() },
+          title: { display: true, text: 'kt CO2e', color: '#7a8a9e', font: { size: 10 } }
+        }
+      }
+    }
+  });
+
+  modal.style.display = 'flex';
+  requestAnimationFrame(() => modal.classList.add('visible'));
+}
+
+function closeFacilityModal() {
+  const modal = document.getElementById('facility-modal');
+  modal.classList.remove('visible');
+  setTimeout(() => { modal.style.display = 'none'; }, 200);
+}
+
+// Modal close handlers
+document.getElementById('modal-close').addEventListener('click', closeFacilityModal);
+document.getElementById('facility-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeFacilityModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeFacilityModal();
+});
+
+// Expose click handler for map.js
+window.__onFacilityClick = openFacilityModal;
+
 function init(features) {
   buildLegend();
   populateStats(features);
   buildTopEmittersChart(features);
   buildSectorChart(features);
   buildDistributionChart(features);
+  loadAllYearsData();
 }
 
 // Wait for map.js to signal data is ready
