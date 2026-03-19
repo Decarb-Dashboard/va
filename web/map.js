@@ -87,7 +87,7 @@ function clampToVirginia(viewState, bounds) {
     ...viewState,
     longitude: clamp(viewState.longitude, minLon - 0.2, maxLon + 0.2),
     latitude: clamp(viewState.latitude, minLat - 0.2, maxLat + 0.2),
-    zoom: clamp(viewState.zoom, 7.1, 11.5)
+    zoom: clamp(viewState.zoom, 6.0, 11.5)
   };
 }
 
@@ -105,8 +105,8 @@ function clampToVirginia(viewState, bounds) {
     const viewState = {
       longitude: manifest.center[0],
       latitude: manifest.center[1],
-      zoom: 7.4,
-      minZoom: 7.1,
+      zoom: 6.8,
+      minZoom: 6.0,
       maxZoom: 11.5,
       pitch: 0,
       bearing: 0
