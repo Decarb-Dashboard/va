@@ -7,9 +7,18 @@ from typing import Iterable
 
 import geopandas as gpd
 import pandas as pd
+from shapely.validation import make_valid
 
 
 EPSG_4326 = "EPSG:4326"
+
+
+def _repair_geometries(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Repair invalid geometries (e.g. unclosed LinearRings) in place."""
+    invalid = ~gdf.geometry.is_valid
+    if invalid.any():
+        gdf.loc[invalid, "geometry"] = gdf.loc[invalid, "geometry"].apply(make_valid)
+    return gdf
 
 
 def load_va_boundary(path: str) -> gpd.GeoDataFrame:
@@ -17,7 +26,7 @@ def load_va_boundary(path: str) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(path)
     if gdf.empty:
         raise ValueError(f"Boundary file '{path}' is empty.")
-    return gdf
+    return _repair_geometries(gdf)
 
 
 def load_vector_layer(path: str, layer: str | None = None) -> gpd.GeoDataFrame:
@@ -26,7 +35,7 @@ def load_vector_layer(path: str, layer: str | None = None) -> gpd.GeoDataFrame:
     if gdf.empty:
         layer_msg = f" (layer='{layer}')" if layer else ""
         raise ValueError(f"Vector file '{path}'{layer_msg} is empty.")
-    return gdf
+    return _repair_geometries(gdf)
 
 
 def load_vector_collection(path: str, layer: str | None = None) -> gpd.GeoDataFrame:
