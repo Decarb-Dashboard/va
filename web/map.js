@@ -105,11 +105,11 @@ function clampToVirginia(viewState, bounds) {
     const viewState = {
       longitude: manifest.center[0],
       latitude: manifest.center[1],
-      zoom: 7.4,
+      zoom: 7.0,
       minZoom: 7.1,
       maxZoom: 11.5,
-      pitch: 0,
-      bearing: 0
+      pitch: 90,
+      bearing: 30
     };
 
     const layers = [
