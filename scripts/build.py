@@ -35,7 +35,9 @@ def main() -> int:
         print("[OK] Build finished.")
         return 0
     except Exception as exc:  # noqa: BLE001
+        import traceback
         print(f"[ERR] Build failed: {exc}")
+        traceback.print_exc()
         return 1
 
 

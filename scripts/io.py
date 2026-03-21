@@ -15,6 +15,11 @@ EPSG_4326 = "EPSG:4326"
 
 def _repair_geometries(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Repair invalid geometries (e.g. unclosed LinearRings) in place."""
+    if gdf.geometry is None:
+        return gdf
+    gdf = gdf[gdf.geometry.notna()].copy()
+    if gdf.empty:
+        return gdf
     invalid = ~gdf.geometry.is_valid
     if invalid.any():
         gdf.loc[invalid, "geometry"] = gdf.loc[invalid, "geometry"].apply(make_valid)
