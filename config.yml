@@ -1,0 +1,101 @@
+state: VA
+
+render:
+  width_px: 3600
+  height_px: 2025
+  dpi: 150
+  theme: dark
+  output_dir: output
+  output_png: va_ghg_map.png
+
+layout:
+  map_frac: 0.66
+  panel_frac: 0.34
+
+paths:
+  va_boundary: geo-boundaries/va_boundary_20m.geojson
+  emissions_csv: ghg-data/flight_cleaned_va_all_years.csv
+  emissions_lat_col: latitude
+  emissions_lon_col: longitude
+  icons_dir: geo-icons/small
+  pipelines: geo-layers/natural_gas_pipelines/pipelines_us.gpkg
+  pipelines_layer: pipelines_us
+  railroads: geo-layers/railroads/railroads
+  primary_roads: geo-layers/primary_roads/primary_roads
+  principal_ports: geo-layers/principal_ports/principal_ports/Principal Ports_20250824_022058_chunk0000.geojson
+  incorporated_places: geo-layers/incorporated_places/incorporated_places/Incorporated Places_20250824_023605_chunk0000.geojson
+
+icons:
+  default: icon_v2_C
+  by_subparts:
+    "C": icon_v2_C
+    "C,HH": icon_v2_C_HH
+    "C,Q": icon_v2_C_Q
+    "C,W": icon_v2_C_W
+    "C,S": icon_v2_C_S
+    "C,I": icon_v2_C_I
+    "C,II": icon_v2_C_II
+    "AA,C": icon_v2_AA_C
+    "DD": icon_v2_DD
+    "C,N": icon_v2_C_N
+    "TT": icon_v2_TT
+    "FF": coal.jpg
+    "D": power.jpg
+    "C,D": power.jpg
+    "C,G,PP": chemical.jpg
+    "C,H": cement.jpg
+    "C,TT": icon_v2_TT
+    "AA,C,TT": icon_v2_AA_C
+
+terrain:
+  tile_zoom: 9
+  vertical_exaggeration: 1.8
+  tint_strength: 1.0
+
+style:
+  background: "#0b0f14"
+
+  # VA outline
+  boundary_edgecolor: "#8fa6bd"
+  boundary_fill: null
+  boundary_linewidth: 1.4
+  boundary_alpha: 0.85
+
+  # Facilities (keep your orange, it's great on dark)
+  points_color: "#ff8c42"
+  icon_zoom: 0.085
+  icon_zoom_scale_min: 0.75
+  icon_zoom_scale_max: 1.35
+  icon_size_emissions_col: ghg_quantity_metric_tons_co2e
+
+  padding_pct: 0.02
+
+  # Pipelines (teal)
+  pipelines_color: "#9D00FF"
+  pipelines_linewidth: 0.55
+  pipelines_alpha: 0.45
+  pipelines_zorder: 2.0
+
+  # Railroads (cool light gray, subtle)
+  railroads_color: "#d7dde6"
+  railroads_linewidth: 0.45
+  railroads_alpha: 0.28
+  railroads_zorder: 2.1
+
+  # Roads
+  primary_roads_color: "#ffd27a"
+  primary_roads_linewidth: 0.85
+  primary_roads_alpha: 0.34
+  primary_roads_zorder: 2.3
+
+  # Places (quiet)
+  incorporated_places_color: "#9aa7b4"
+  incorporated_places_linewidth: 0.35
+  incorporated_places_alpha: 0.18
+  incorporated_places_zorder: 1.7
+
+  # Ports
+  principal_ports_color: "#4dd0e1"
+  principal_ports_alpha: 0.25
+  principal_ports_marker_size: 9
+  principal_ports_zorder: 2.6

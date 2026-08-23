@@ -1,0 +1,8 @@
+subparts,what_they_represent
+"C,D","Fossil-fuel power plants: stationary combustion plus electricity generation (typical natural gas or coal power stations)"
+"D","Electricity generation units reporting emissions primarily from power generation equipment"
+"C,G,PP","Chemical manufacturing facility: fuel combustion plus nitric acid and petrochemical process emissions"
+"AA,C,TT","Pulp & paper mill operations: combustion plus pulping/recovery and industrial process emissions"
+"FF","Underground coal mining: methane emissions released during mining operations"
+"C,H","Cement manufacturing: fuel combustion plus calcination process emissions from clinker production"
+"C,TT","Industrial chemical manufacturing: combustion plus industrial process emissions"

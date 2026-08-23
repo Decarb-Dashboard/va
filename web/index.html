@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VA GHG Dashboard - deck.gl</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        width: 100%; height: 100%; overflow: hidden;
+        background: #0b0f14;
+        font-family: Inter, system-ui, sans-serif;
+        color: #d8e2ee;
+      }
+      #layout {
+        display: flex;
+        width: 100%; height: 100%;
+      }
+      #map-container {
+        flex: 1 1 65%;
+        position: relative;
+        min-width: 0;
+      }
+      #app {
+        width: 100%; height: 100%;
+      }
+      #panel {
+        flex: 0 0 35%;
+        max-width: 460px;
+        height: 100%;
+        overflow-y: auto;
+        background: #101520;
+        border-left: 1px solid rgba(162, 186, 212, 0.15);
+        padding: 20px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      #panel::-webkit-scrollbar { width: 6px; }
+      #panel::-webkit-scrollbar-track { background: transparent; }
+      #panel::-webkit-scrollbar-thumb { background: rgba(162,186,212,0.2); border-radius: 3px; }
+
+      .panel-header {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .panel-header h1 {
+        font-size: 18px;
+        font-weight: 700;
+        color: #e8f0fa;
+        letter-spacing: -0.3px;
+      }
+      .panel-header .subtitle {
+        font-size: 11px;
+        color: #7a8a9e;
+        font-weight: 400;
+      }
+
+      .card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(162, 186, 212, 0.1);
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+      .card h2 {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #7a8a9e;
+        margin-bottom: 12px;
+      }
+
+      /* Legend */
+      .legend-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: #b0bfcf;
+      }
+      .legend-swatch {
+        width: 14px;
+        height: 4px;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .legend-swatch.circle {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      .legend-swatch.icon {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        background-size: cover;
+        background-position: center;
+      }
+
+      /* Stats row */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .stat-box {
+        text-align: center;
+        padding: 10px 4px;
+        background: rgba(255,255,255,0.02);
+        border-radius: 6px;
+        border: 1px solid rgba(162,186,212,0.07);
+      }
+      .stat-value {
+        font-size: 20px;
+        font-weight: 700;
+        color: #e8f0fa;
+        line-height: 1.2;
+      }
+      .stat-label {
+        font-size: 10px;
+        color: #7a8a9e;
+        margin-top: 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      /* Chart containers */
+      .chart-wrap {
+        position: relative;
+        width: 100%;
+      }
+      .chart-wrap.bar { height: 200px; }
+      .chart-wrap.doughnut { height: 190px; }
+      .chart-wrap.line { height: 170px; }
+
+      /* Tooltip (deck.gl) */
+      .tooltip {
+        position: fixed;
+        pointer-events: none;
+        background: rgba(8, 11, 16, 0.95);
+        color: #d8e2ee;
+        border: 1px solid rgba(162, 186, 212, 0.35);
+        border-radius: 6px;
+        font-size: 12px;
+        padding: 8px 10px;
+        max-width: 280px;
+      }
+
+      /* Facility detail modal */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .modal-backdrop.visible { opacity: 1; }
+      .modal-card {
+        background: #141a24;
+        border: 1px solid rgba(162, 186, 212, 0.2);
+        border-radius: 10px;
+        padding: 22px 24px 18px;
+        width: 520px;
+        max-width: 92vw;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      }
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 6px;
+      }
+      .modal-header h3 {
+        font-size: 15px;
+        font-weight: 700;
+        color: #e8f0fa;
+        line-height: 1.3;
+        flex: 1;
+        margin-right: 12px;
+      }
+      .modal-close {
+        background: none;
+        border: none;
+        color: #7a8a9e;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+      }
+      .modal-close:hover { color: #d8e2ee; }
+      .modal-subtitle {
+        font-size: 11px;
+        color: #7a8a9e;
+        margin-bottom: 16px;
+      }
+      .modal-chart-wrap {
+        position: relative;
+        width: 100%;
+        height: 220px;
+      }
+      .modal-stats {
+        display: flex;
+        gap: 16px;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(162, 186, 212, 0.1);
+      }
+      .modal-stat {
+        font-size: 11px;
+        color: #7a8a9e;
+      }
+      .modal-stat strong {
+        color: #b0bfcf;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="layout">
+      <div id="map-container">
+        <div id="app"></div>
+      </div>
+      <div id="panel">
+        <div class="panel-header">
+          <h1>Virginia GHG Dashboard</h1>
+          <span class="subtitle">2023 EPA GHGRP</span>
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="stats-row" id="stats-row">
+          <div class="stat-box">
+            <div class="stat-value" id="stat-facilities">--</div>
+            <div class="stat-label">Facilities</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" id="stat-emissions">--</div>
+            <div class="stat-label">Mt CO2e</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" id="stat-sectors">--</div>
+            <div class="stat-label">Sectors</div>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="card" id="legend-card">
+          <h2>Map Legend</h2>
+          <div class="legend-list" id="legend-list"></div>
+        </div>
+
+        <!-- Top Emitters Bar Chart -->
+        <div class="card">
+          <h2>Top 10 Emitters</h2>
+          <div class="chart-wrap bar">
+            <canvas id="chart-top-emitters"></canvas>
+          </div>
+        </div>
+
+        <!-- Emissions by Sector Doughnut -->
+        <div class="card">
+          <h2>Emissions by Sector</h2>
+          <div class="chart-wrap doughnut">
+            <canvas id="chart-sectors"></canvas>
+          </div>
+        </div>
+
+        <!-- Emissions Distribution Line/Bar -->
+        <div class="card">
+          <h2>Facility Size Distribution</h2>
+          <div class="chart-wrap line">
+            <canvas id="chart-distribution"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Facility detail modal -->
+    <div class="modal-backdrop" id="facility-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modal-title">Facility Name</h3>
+          <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <div class="modal-subtitle" id="modal-subtitle"></div>
+        <div class="modal-chart-wrap">
+          <canvas id="chart-facility-timeline"></canvas>
+        </div>
+        <div class="modal-stats" id="modal-stats"></div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/deck.gl@^9.0.0/dist.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script type="module" src="./map.js"></script>
+    <script type="module" src="./dashboard.js"></script>
+  </body>
+</html>

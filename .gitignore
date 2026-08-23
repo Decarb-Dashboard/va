@@ -1,0 +1,41 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+.env
+.env.*
+
+# Outputs / build artifacts
+*.pdf
+
+# Large geodata caches / downloads (customize as needed)
+data/raw/
+layers/raw/
+layers/cache/
+*.tif
+*.tiff
+*.vrt
+*.gpkg-journal
+*.aux.xml
+
+# If you use contextily caching
+.cache/
+data/flight.xls
+*.zip
+uGet-2.2.3-1-win32.gtk3.exe
+ghg-data/flight.xls
+ghg-data/flight_cleaned_va_2023.csv

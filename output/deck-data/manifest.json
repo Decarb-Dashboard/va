@@ -1,0 +1,46 @@
+{
+  "center": [
+    -79.45883464131043,
+    38.00337418563032
+  ],
+  "bounds": [
+    -83.675413105578,
+    36.540736603736086,
+    -75.24225617704288,
+    39.46601176752455
+  ],
+  "terrain_exaggeration": 1.8,
+  "files": {
+    "boundary": "output/deck-data/boundary.geojson",
+    "pipelines": "output/deck-data/pipelines.geojson",
+    "railroads": "output/deck-data/railroads.geojson",
+    "primary_roads": "output/deck-data/primary_roads.geojson",
+    "incorporated_places": "output/deck-data/incorporated_places.geojson",
+    "principal_ports": "output/deck-data/principal_ports.geojson",
+    "ghg": "output/deck-data/ghg_2023.geojson"
+  },
+  "icons": {
+    "base_dir": "geo-icons/small",
+    "default": "icon_v2_C",
+    "by_subparts": {
+      "C": "icon_v2_C",
+      "C,HH": "icon_v2_C_HH",
+      "C,Q": "icon_v2_C_Q",
+      "C,W": "icon_v2_C_W",
+      "C,S": "icon_v2_C_S",
+      "C,I": "icon_v2_C_I",
+      "C,II": "icon_v2_C_II",
+      "AA,C": "icon_v2_AA_C",
+      "DD": "icon_v2_DD",
+      "C,N": "icon_v2_C_N",
+      "TT": "icon_v2_TT",
+      "FF": "coal.jpg",
+      "D": "power.jpg",
+      "C,D": "power.jpg",
+      "C,G,PP": "chemical.jpg",
+      "C,H": "cement.jpg",
+      "C,TT": "icon_v2_TT",
+      "AA,C,TT": "icon_v2_AA_C"
+    }
+  }
+}
