@@ -261,18 +261,31 @@ function clampToVirginia(viewState, bounds, zoomRange) {
 }
 
 /**
- * Show the current zoom as a level and as a percentage of the allowed range,
- * so the usable limit can be read off the map and set in config.yml.
+ * Show the current camera as zoom (level and percentage of the allowed range),
+ * bearing and tilt, so a view worth keeping can be read off the map and set as
+ * web.initial_* / web.max_zoom in config.yml.
  */
-function makeZoomReadout(zoomRange) {
-  const element = document.getElementById('zoom-readout');
-  return (zoom) => {
-    if (!element) return;
+function makeViewReadout(zoomRange) {
+  const zoomElement = document.getElementById('zoom-readout');
+  const cameraElement = document.getElementById('camera-readout');
+  return (viewState) => {
     const [min, max] = zoomRange;
-    const span = Math.max(max - min, 1e-6);
-    const percent = Math.round(clamp((zoom - min) / span, 0, 1) * 100);
-    element.textContent = `z ${zoom.toFixed(1)} · ${percent}%`;
-    element.title = `Zoom ${zoom.toFixed(2)} of ${min.toFixed(2)}–${max.toFixed(2)} (web.max_zoom in config.yml)`;
+    const zoom = viewState.zoom;
+    const bearing = Math.round(viewState.bearing || 0);
+    const pitch = Math.round(viewState.pitch || 0);
+
+    if (zoomElement) {
+      const span = Math.max(max - min, 1e-6);
+      const percent = Math.round(clamp((zoom - min) / span, 0, 1) * 100);
+      zoomElement.textContent = `z ${zoom.toFixed(1)} · ${percent}%`;
+      zoomElement.title =
+        `Zoom ${zoom.toFixed(2)} of ${min.toFixed(2)}–${max.toFixed(2)} (web.max_zoom in config.yml)`;
+    }
+    if (cameraElement) {
+      cameraElement.textContent = `↻ ${bearing}° · ∡ ${pitch}°`;
+      cameraElement.title =
+        `Bearing ${bearing}°, tilt ${pitch}° (web.initial_bearing / web.initial_pitch in config.yml)`;
+    }
   };
 }
 
@@ -545,8 +558,8 @@ function makeZoomReadout(zoomRange) {
       bearing: Number(webCfg.initial_bearing ?? 0)
     };
     let viewState = {...initialViewState};
-    let showZoom = makeZoomReadout(zoomRange);
-    showZoom(initialViewState.zoom);
+    let showView = makeViewReadout(zoomRange);
+    showView(initialViewState);
 
     /* ---------------------------------------------------- readiness tracking */
 
@@ -574,7 +587,7 @@ function makeZoomReadout(zoomRange) {
       onViewStateChange: ({viewState: next}) => {
         viewState = clampToVirginia(next, bounds, zoomRange);
         deckInstance.setProps({viewState});
-        showZoom(viewState.zoom);
+        showView(viewState);
         return viewState;
       },
       onAfterRender: () => {
@@ -611,7 +624,7 @@ function makeZoomReadout(zoomRange) {
     const resetView = () => {
       const refit = fitViewState(bounds, fitPadding);
       zoomRange = [refit.zoom - zoomOutAllowance, Number(webCfg.max_zoom ?? 12.5)];
-      showZoom = makeZoomReadout(zoomRange);
+      showView = makeViewReadout(zoomRange);
       viewState = {
         ...refit,
         minZoom: zoomRange[0],
@@ -620,9 +633,17 @@ function makeZoomReadout(zoomRange) {
         bearing: Number(webCfg.initial_bearing ?? 0)
       };
       deckInstance.setProps({viewState});
-      showZoom(viewState.zoom);
+      showView(viewState);
     };
 
+    // Flatten to straight-down without moving the camera.
+    const topDownView = () => {
+      viewState = {...viewState, pitch: 0, bearing: 0};
+      deckInstance.setProps({viewState});
+      showView(viewState);
+    };
+
+    document.getElementById('top-down')?.addEventListener('click', topDownView);
     document.getElementById('reset-view')?.addEventListener('click', resetView);
 
     // Drape the shaded relief over the mesh as soon as it has been built.
@@ -638,7 +659,7 @@ function makeZoomReadout(zoomRange) {
     window.addEventListener('resize', () => {
       const refit = fitViewState(bounds, fitPadding);
       zoomRange = [refit.zoom - zoomOutAllowance, Number(webCfg.max_zoom ?? 12.5)];
-      showZoom = makeZoomReadout(zoomRange);
+      showView = makeViewReadout(zoomRange);
       viewState = {
         ...viewState,
         minZoom: zoomRange[0],

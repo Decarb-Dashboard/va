@@ -75,8 +75,8 @@
     "principal_ports_color": "#4dd0e1"
   },
   "web": {
-    "initial_pitch": 0,
-    "initial_bearing": 0,
+    "initial_pitch": 30,
+    "initial_bearing": 15,
     "fit_padding_px": 56,
     "zoom_out_allowance": 0.6,
     "max_zoom": 15.0,

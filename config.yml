@@ -84,8 +84,10 @@ terrain:
 
 # Settings consumed by the deck.gl web map (exported into the deck manifest).
 web:
-  initial_pitch: 0
-  initial_bearing: 0
+  # Opening camera. The map's readout shows the live bearing and tilt, so a view
+  # worth keeping can be read off the map and pasted here.
+  initial_pitch: 30
+  initial_bearing: 15
   fit_padding_px: 56
   # How far past the fit-the-state zoom the user may zoom out / in.
   zoom_out_allowance: 0.6

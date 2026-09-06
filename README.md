@@ -97,10 +97,11 @@ Then open `http://localhost:8000/web/` to view the interactive deck.gl map with:
 - GHG facilities (`IconLayer`, 2023 only, icon size scaled by emissions, click for the facility's reporting history)
 - A hover-to-open legend, a loading bar, and summary charts in the side panel
 
-Map controls: drag to pan, scroll to zoom, **Shift + click + drag to rotate and tilt**, and *Reset*
-to return to the flat, whole-state view. The controls bar shows the current zoom level and its
-percentage of the allowed range, so a usable ceiling can be read off the map and set as
-`web.max_zoom` in `config.yml`.
+Map controls: drag to pan, scroll to zoom, **Shift + click + drag to rotate and tilt**, *Top-down*
+to look straight down, and *Reset* to return to the opening view. The controls bar reads out the
+live zoom (level plus percentage of the allowed range), bearing and tilt, so a view worth keeping
+can be read off the map and set as `web.initial_bearing` / `web.initial_pitch` / `web.max_zoom` in
+`config.yml` (rebuild the deck assets afterwards).
 
 ---
 

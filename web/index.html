@@ -307,7 +307,9 @@
         min-width: 74px;
         cursor: default;
       }
-      #reset-view {
+      .camera-readout { min-width: 86px; }
+      #reset-view,
+      #top-down {
         font-family: inherit;
         font-size: 10px;
         letter-spacing: 0.4px;
@@ -319,7 +321,8 @@
         padding: 3px 8px;
         cursor: pointer;
       }
-      #reset-view:hover { color: #e8f0fa; background: rgba(162, 186, 212, 0.2); }
+      #reset-view:hover,
+      #top-down:hover { color: #e8f0fa; background: rgba(162, 186, 212, 0.2); }
 
       @media (max-width: 900px) {
         #controls-hint .hide-narrow { display: none; }
@@ -480,7 +483,9 @@
           <span><kbd>Shift</kbd> + click + drag to rotate &amp; tilt</span>
           <span class="sep">·</span>
           <span id="zoom-readout" class="zoom-readout">z --</span>
-          <button id="reset-view" title="Back to the flat, full-state view">Reset</button>
+          <span id="camera-readout" class="zoom-readout camera-readout">↻ --° · ∡ --°</span>
+          <button id="top-down" title="Look straight down (tilt and bearing to 0)">Top-down</button>
+          <button id="reset-view" title="Back to the default view">Reset</button>
         </div>
       </div>
 
