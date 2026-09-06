@@ -80,7 +80,20 @@ def collapse_to_dimension(geometry: BaseGeometry | None, dimension: int) -> Base
     return merged
 
 
-def _has_finite_bounds(gdf: gpd.GeoDataFrame) -> np.ndarray:
+def describe_geometry(gdf: gpd.GeoDataFrame, tag: str) -> str:
+    """One-line dump of a layer's state, for tracing a geometry through a pipeline."""
+    geometry = gdf.geometry
+    finite = has_finite_bounds(gdf) if len(gdf) else np.array([], dtype=bool)
+    return (
+        f"{tag}: len={len(gdf)} crs={gdf.crs} types={sorted(set(geometry.geom_type.dropna()))}"
+        f" valid={int(geometry.is_valid.sum())}/{len(gdf)}"
+        f" empty={int(geometry.is_empty.sum())} isna={int(geometry.isna().sum())}"
+        f" finite={int(finite.sum())}/{len(gdf)}"
+        f" total_bounds={np.round(gdf.total_bounds, 6).tolist() if len(gdf) else []}"
+    )
+
+
+def has_finite_bounds(gdf: gpd.GeoDataFrame) -> np.ndarray:
     """True where a feature's bounds are finite (NaN/inf coordinates break GEOS)."""
     bounds = gdf.geometry.bounds.to_numpy(dtype="float64", na_value=np.nan)
     return np.isfinite(bounds).all(axis=1)
@@ -95,7 +108,7 @@ def geometry_report(gdf: gpd.GeoDataFrame, label: str) -> GeometryStats:
         total=len(gdf),
         null=int(geometry.isna().sum()),
         empty=int(geometry.is_empty.sum()),
-        non_finite=int((~_has_finite_bounds(non_null)).sum()) if len(non_null) else 0,
+        non_finite=int((~has_finite_bounds(non_null)).sum()) if len(non_null) else 0,
         invalid=int((~geometry.is_valid).sum()),
         geom_types=sorted(set(geometry.geom_type.dropna())),
     )
@@ -115,10 +128,21 @@ def sanitize_geometries(
     if gdf.empty:
         return gdf.copy(), stats
 
+    # Already-clean layers are returned untouched: a valid Polygon/MultiPolygon
+    # must never be routed through make_valid()/collapse handling.
+    if (
+        stats.null == 0
+        and stats.empty == 0
+        and stats.non_finite == 0
+        and stats.invalid == 0
+    ):
+        stats.kept = stats.total
+        return gdf, stats
+
     usable = gdf.geometry.notna() & ~gdf.geometry.is_empty
     cleaned = gdf[usable].copy()
     if not cleaned.empty:
-        cleaned = cleaned[_has_finite_bounds(cleaned)].copy()
+        cleaned = cleaned[has_finite_bounds(cleaned)].copy()
 
     if cleaned.empty:
         stats.dropped = stats.total
@@ -147,7 +171,7 @@ def sanitize_geometries(
                 collapsed += 1
             fixed.append(geometry)
         stats.collapsed = collapsed
-        cleaned.loc[invalid, "geometry"] = gpd.GeoSeries(
+        cleaned.loc[invalid, cleaned.geometry.name] = gpd.GeoSeries(
             fixed, index=cleaned.index[invalid], crs=cleaned.crs
         )
         cleaned = cleaned[cleaned.geometry.notna() & ~cleaned.geometry.is_empty].copy()

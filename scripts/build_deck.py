@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -14,8 +15,10 @@ from shapely.geometry.base import BaseGeometry
 
 from scripts.io import (
     collapse_to_dimension,
+    describe_geometry,
     emissions_to_gdf,
     geometry_report,
+    has_finite_bounds,
     load_emissions_csv,
     load_va_boundary,
     load_vector_collection,
@@ -40,11 +43,12 @@ def _write_geojson(path: Path, gdf: gpd.GeoDataFrame) -> None:
 
 
 def _boundary_mask(boundary: gpd.GeoDataFrame, target_crs) -> BaseGeometry:
-    """Return the Virginia outline as a single valid polygon in `target_crs`.
+    """Return the Virginia outline as a single polygon in `target_crs`.
 
-    The mask is repaired and cached: an invalid or mixed-dimension union makes
-    every later overlay operation unreliable, and it was being rebuilt once per
-    layer.
+    The state outline is polygonal by definition, so it takes a polygon-only
+    path: no generic mixed-dimension cleanup, and a valid Polygon/MultiPolygon
+    goes to the union untouched. Every stage is recorded so a failure names the
+    step that broke rather than only its symptom.
     """
     if boundary.crs is None:
         raise ValueError("Boundary has no CRS; cannot clip layers.")
@@ -54,27 +58,76 @@ def _boundary_mask(boundary: gpd.GeoDataFrame, target_crs) -> BaseGeometry:
     if cached is not None:
         return cached
 
-    local, stats = sanitize_geometries(boundary, label="va boundary")
-    if local.empty:
-        raise ValueError("Virginia boundary has no usable geometry after repair.")
-    if stats.dropped or stats.repaired:
-        print(f"[INFO] {stats.format()}")
+    trace = [describe_geometry(boundary, "boundary as loaded")]
 
-    if str(local.crs) != key:
-        local = local.to_crs(target_crs)
+    usable = boundary[boundary.geometry.notna() & ~boundary.geometry.is_empty]
+    if len(usable) != len(boundary):
+        trace.append(describe_geometry(usable, "after dropping null/empty"))
+    if usable.empty:
+        raise ValueError(_boundary_failure("boundary has no non-empty geometry", trace))
 
-    mask = shapely.union_all(local.geometry.values)
+    unexpected = set(usable.geometry.geom_type) - {"Polygon", "MultiPolygon"}
+    if unexpected:
+        raise ValueError(
+            _boundary_failure(f"boundary is not polygonal: found {sorted(unexpected)}", trace)
+        )
+
+    invalid = ~usable.geometry.is_valid
+    if invalid.any():
+        repaired = usable.geometry[invalid].apply(shapely.make_valid).apply(
+            lambda geometry: collapse_to_dimension(geometry, 2)
+        )
+        usable = usable.copy()
+        usable.loc[invalid, usable.geometry.name] = repaired
+        usable = usable[usable.geometry.notna() & ~usable.geometry.is_empty]
+        trace.append(describe_geometry(usable, f"after make_valid on {int(invalid.sum())} feature(s)"))
+        if usable.empty:
+            raise ValueError(_boundary_failure("boundary geometry did not survive repair", trace))
+
+    if str(usable.crs) != key:
+        usable = usable.to_crs(target_crs)
+        trace.append(describe_geometry(usable, f"after to_crs({key})"))
+        # A broken local PROJ installation reprojects to non-finite coordinates,
+        # which makes every later GEOS call return nothing.
+        finite = has_finite_bounds(usable)
+        if not finite.all():
+            raise ValueError(
+                _boundary_failure(
+                    f"reprojection to {key} produced non-finite coordinates in "
+                    f"{int((~finite).sum())} of {len(usable)} feature(s); check the local "
+                    "PROJ data (python -c \"import pyproj; print(pyproj.datadir.get_data_dir())\")",
+                    trace,
+                )
+            )
+
+    mask = usable.geometry.union_all()
+    trace.append(
+        f"after union_all: {None if mask is None else mask.geom_type}"
+        f" empty={None if mask is None else mask.is_empty}"
+        f" valid={None if mask is None else mask.is_valid}"
+        f" bounds={None if mask is None else tuple(round(v, 6) for v in mask.bounds)}"
+    )
+
     if mask is None or mask.is_empty:
-        raise ValueError("Virginia boundary union produced no geometry.")
+        raise ValueError(
+            _boundary_failure(
+                "union of the boundary produced no geometry (GEOS returned nothing)", trace
+            )
+        )
+    if not mask.is_valid:
+        raise ValueError(_boundary_failure("union of the boundary is invalid", trace))
 
-    if not mask.is_valid or mask.geom_type == "GeometryCollection":
-        print("[WARN] Boundary union was not a clean polygon; repairing it.")
-        mask = collapse_to_dimension(shapely.make_valid(mask), 2)
-        if mask is None or mask.is_empty:
-            raise ValueError("Virginia boundary could not be repaired into a polygon.")
+    if os.environ.get("VA_GEO_DEBUG"):
+        print("[DEBUG] boundary trace:\n  " + "\n  ".join(trace))
 
     _BOUNDARY_MASKS[key] = mask
     return mask
+
+
+def _boundary_failure(reason: str, trace: list[str]) -> str:
+    """Fail with the whole boundary trace so the breaking step is visible."""
+    steps = "\n  ".join(trace)
+    return f"Virginia boundary: {reason}.\nBoundary trace:\n  {steps}"
 
 
 def _intersect_feature_by_feature(
