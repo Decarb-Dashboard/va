@@ -8,10 +8,24 @@ from typing import Any
 
 import geopandas as gpd
 import pandas as pd
+import shapely
+from shapely.errors import GEOSException
+from shapely.geometry.base import BaseGeometry
 
-from scripts.io import emissions_to_gdf, load_emissions_csv, load_va_boundary, load_vector_collection
+from scripts.io import (
+    collapse_to_dimension,
+    emissions_to_gdf,
+    geometry_report,
+    load_emissions_csv,
+    load_va_boundary,
+    load_vector_collection,
+    sanitize_geometries,
+)
 
 EPSG_4326 = "EPSG:4326"
+
+# Repaired boundary masks, keyed by the CRS they were built for.
+_BOUNDARY_MASKS: dict[str, BaseGeometry] = {}
 
 
 def _to_feature_collection(gdf: gpd.GeoDataFrame) -> dict[str, Any]:
@@ -25,21 +39,112 @@ def _write_geojson(path: Path, gdf: gpd.GeoDataFrame) -> None:
     path.write_text(json.dumps(_to_feature_collection(gdf), separators=(",", ":")))
 
 
-def _clip_to_boundary(layer: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Clip any layer to Virginia to avoid shipping continental-scale geometry."""
-    if layer.crs is None:
-        raise ValueError("Layer has no CRS; cannot clip to boundary.")
+def _boundary_mask(boundary: gpd.GeoDataFrame, target_crs) -> BaseGeometry:
+    """Return the Virginia outline as a single valid polygon in `target_crs`.
 
+    The mask is repaired and cached: an invalid or mixed-dimension union makes
+    every later overlay operation unreliable, and it was being rebuilt once per
+    layer.
+    """
     if boundary.crs is None:
         raise ValueError("Boundary has no CRS; cannot clip layers.")
 
-    boundary_local = boundary.to_crs(layer.crs) if layer.crs != boundary.crs else boundary
-    boundary_union = boundary_local.geometry.union_all()
+    key = str(target_crs)
+    cached = _BOUNDARY_MASKS.get(key)
+    if cached is not None:
+        return cached
 
-    clipped = layer.copy()
-    clipped["geometry"] = clipped.geometry.intersection(boundary_union)
-    valid_geometry = (~clipped.geometry.is_empty) & (~clipped.geometry.isna())
-    clipped = clipped[valid_geometry].copy()
+    local, stats = sanitize_geometries(boundary, label="va boundary")
+    if local.empty:
+        raise ValueError("Virginia boundary has no usable geometry after repair.")
+    if stats.dropped or stats.repaired:
+        print(f"[INFO] {stats.format()}")
+
+    if str(local.crs) != key:
+        local = local.to_crs(target_crs)
+
+    mask = shapely.union_all(local.geometry.values)
+    if mask is None or mask.is_empty:
+        raise ValueError("Virginia boundary union produced no geometry.")
+
+    if not mask.is_valid or mask.geom_type == "GeometryCollection":
+        print("[WARN] Boundary union was not a clean polygon; repairing it.")
+        mask = collapse_to_dimension(shapely.make_valid(mask), 2)
+        if mask is None or mask.is_empty:
+            raise ValueError("Virginia boundary could not be repaired into a polygon.")
+
+    _BOUNDARY_MASKS[key] = mask
+    return mask
+
+
+def _intersect_feature_by_feature(
+    geometries: gpd.GeoSeries, mask: BaseGeometry, label: str
+) -> tuple[gpd.GeoSeries, int]:
+    """Intersect one feature at a time so a single bad feature cannot stop the build."""
+    results: list[BaseGeometry | None] = []
+    failures = 0
+    for geometry in geometries:
+        try:
+            results.append(geometry.intersection(mask))
+        except (GEOSException, ValueError) as exc:
+            failures += 1
+            print(f"[WARN] {label}: dropped one feature GEOS could not clip: {exc}")
+            results.append(None)
+    return gpd.GeoSeries(results, index=geometries.index, crs=geometries.crs), failures
+
+
+def _clip_to_boundary(
+    layer: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame, label: str = "layer"
+) -> gpd.GeoDataFrame:
+    """Clip any layer to Virginia to avoid shipping continental-scale geometry."""
+    if layer.crs is None:
+        raise ValueError(f"Layer '{label}' has no CRS; cannot clip to boundary.")
+
+    print(f"[INFO] {geometry_report(layer, label).describe()}")
+    cleaned, stats = sanitize_geometries(layer, label=label)
+    if stats.repaired or stats.dropped:
+        print(f"[INFO] {stats.format()}")
+    if cleaned.empty:
+        print(f"[WARN] {label}: no usable geometry after repair; nothing to clip.")
+        return cleaned
+
+    mask = _boundary_mask(boundary, cleaned.crs)
+
+    # Only features whose bounding box meets Virginia can survive the clip, and
+    # skipping the rest keeps continental-scale layers off the overlay engine.
+    candidate_positions = cleaned.sindex.query(mask)
+    candidates = cleaned.iloc[sorted(candidate_positions)].copy()
+    if candidates.empty:
+        print(f"[INFO] {label}: no features overlap Virginia.")
+        return candidates
+
+    dimensions = shapely.get_dimensions(candidates.geometry.values)
+    try:
+        clipped_geometry = candidates.geometry.intersection(mask)
+        failures = 0
+    except (GEOSException, ValueError) as exc:
+        print(f"[WARN] {label}: vectorised clip failed ({exc}); isolating features.")
+        clipped_geometry, failures = _intersect_feature_by_feature(candidates.geometry, mask, label)
+
+    # Overlay output can mix dimensions (a polygon clip touching an edge yields
+    # lines); keep only the dimension the source feature had.
+    kept: list[BaseGeometry | None] = []
+    for geometry, dimension in zip(clipped_geometry, dimensions):
+        if geometry is None or geometry.is_empty:
+            kept.append(None)
+        elif geometry.geom_type == "GeometryCollection":
+            kept.append(collapse_to_dimension(geometry, int(dimension)))
+        else:
+            kept.append(geometry)
+
+    candidates["geometry"] = gpd.GeoSeries(kept, index=candidates.index, crs=candidates.crs)
+    clipped = candidates[candidates.geometry.notna() & ~candidates.geometry.is_empty].copy()
+
+    print(
+        f"[INFO] {label}: clipped to Virginia -> {len(clipped)} features"
+        f" (from {len(candidates)} candidates of {len(cleaned)};"
+        f" {failures} unclippable feature(s))"
+    )
     return clipped
 
 
@@ -53,7 +158,7 @@ def _ghg_points(cfg: dict[str, Any], boundary: gpd.GeoDataFrame) -> gpd.GeoDataF
         lon_col=paths.get("emissions_lon_col", "longitude"),
         crs=EPSG_4326,
     )
-    gdf = _clip_to_boundary(gdf, boundary)
+    gdf = _clip_to_boundary(gdf, boundary, label="ghg facilities")
     gdf["ghg_quantity_metric_tons_co2e"] = pd.to_numeric(
         gdf.get("ghg_quantity_metric_tons_co2e"), errors="coerce"
     ).fillna(0)
@@ -126,11 +231,16 @@ def build_deck_assets(cfg: dict[str, Any]) -> Path:
     pipelines = load_vector_collection(
         cfg["paths"]["pipelines"], layer=cfg["paths"].get("pipelines_layer")
     )
-    _write_geojson(output_dir / "pipelines.geojson", _clip_to_boundary(pipelines, boundary))
+    _write_geojson(
+        output_dir / "pipelines.geojson", _clip_to_boundary(pipelines, boundary, label="pipelines")
+    )
 
     for layer_name in ["railroads", "primary_roads", "incorporated_places", "principal_ports"]:
         layer = load_vector_collection(cfg["paths"][layer_name])
-        _write_geojson(output_dir / f"{layer_name}.geojson", _clip_to_boundary(layer, boundary))
+        _write_geojson(
+            output_dir / f"{layer_name}.geojson",
+            _clip_to_boundary(layer, boundary, label=layer_name),
+        )
 
     ghg = _ghg_points(cfg, boundary)
     _write_geojson(output_dir / "ghg_2023.geojson", ghg)
