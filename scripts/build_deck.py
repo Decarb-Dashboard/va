@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import shapely
 from shapely.errors import GEOSException
@@ -17,11 +18,13 @@ from scripts.io import (
     collapse_to_dimension,
     describe_geometry,
     emissions_to_gdf,
+    expected_reprojected_bounds,
     geometry_report,
     has_finite_bounds,
     load_emissions_csv,
     load_va_boundary,
     load_vector_collection,
+    reproject_polygonal,
     sanitize_geometries,
 )
 
@@ -85,20 +88,12 @@ def _boundary_mask(boundary: gpd.GeoDataFrame, target_crs) -> BaseGeometry:
             raise ValueError(_boundary_failure("boundary geometry did not survive repair", trace))
 
     if str(usable.crs) != key:
-        usable = usable.to_crs(target_crs)
-        trace.append(describe_geometry(usable, f"after to_crs({key})"))
-        # A broken local PROJ installation reprojects to non-finite coordinates,
-        # which makes every later GEOS call return nothing.
-        finite = has_finite_bounds(usable)
-        if not finite.all():
-            raise ValueError(
-                _boundary_failure(
-                    f"reprojection to {key} produced non-finite coordinates in "
-                    f"{int((~finite).sum())} of {len(usable)} feature(s); check the local "
-                    "PROJ data (python -c \"import pyproj; print(pyproj.datadir.get_data_dir())\")",
-                    trace,
-                )
-            )
+        # Not GeoDataFrame.to_crs(): its set_coordinates() path fails on this
+        # outline on some shapely/GEOS builds. See io.reproject_polygonal.
+        expected_bounds = expected_reprojected_bounds(usable, target_crs)
+        usable = reproject_polygonal(usable, target_crs)
+        trace.append(describe_geometry(usable, f"after reproject_polygonal({key})"))
+        _validate_boundary(usable, expected_bounds, key, trace)
 
     mask = usable.geometry.union_all()
     trace.append(
@@ -122,6 +117,53 @@ def _boundary_mask(boundary: gpd.GeoDataFrame, target_crs) -> BaseGeometry:
 
     _BOUNDARY_MASKS[key] = mask
     return mask
+
+
+def _validate_boundary(
+    boundary: gpd.GeoDataFrame,
+    expected_bounds: tuple[float, float, float, float],
+    key: str,
+    trace: list[str],
+) -> None:
+    """Check a reprojected boundary before anything downstream depends on it."""
+    geometry = boundary.geometry
+
+    def fail(reason: str) -> None:
+        raise ValueError(_boundary_failure(reason, trace))
+
+    if boundary.empty or geometry.isna().any():
+        fail(f"reprojection to {key} produced null geometry")
+    if geometry.is_empty.any():
+        fail(f"reprojection to {key} produced empty geometry")
+
+    unexpected = set(geometry.geom_type) - {"Polygon", "MultiPolygon"}
+    if unexpected:
+        fail(f"reprojection to {key} produced non-polygonal geometry {sorted(unexpected)}")
+
+    finite = has_finite_bounds(boundary)
+    if not finite.all():
+        fail(
+            f"reprojection to {key} produced non-finite coordinates in "
+            f"{int((~finite).sum())} of {len(boundary)} feature(s)"
+        )
+    if not geometry.is_valid.all():
+        fail(f"reprojection to {key} produced invalid geometry")
+
+    # The transformed bounding box should land where transforming the source
+    # bounding box says it will; anything else means the transform went wrong.
+    actual = boundary.total_bounds
+    extent = max(expected_bounds[2] - expected_bounds[0], expected_bounds[3] - expected_bounds[1])
+    tolerance = max(abs(extent) * 0.01, 1e-6)
+    drift = [abs(float(a) - float(b)) for a, b in zip(actual, expected_bounds)]
+    if max(drift) > tolerance:
+        fail(
+            f"reprojection to {key} landed at {np.round(actual, 6).tolist()}, expected about "
+            f"{[round(value, 6) for value in expected_bounds]} (drift {max(drift):.6g} "
+            f"> tolerance {tolerance:.6g})"
+        )
+    trace.append(
+        f"bounds check: {np.round(actual, 6).tolist()} within {tolerance:.6g} of expected"
+    )
 
 
 def _boundary_failure(reason: str, trace: list[str]) -> str:
@@ -278,7 +320,10 @@ def build_deck_assets(cfg: dict[str, Any]) -> Path:
     output_dir = Path(cfg["render"]["output_dir"]) / "deck-data"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    boundary = load_va_boundary(cfg["paths"]["va_boundary"])
+    # Reproject the outline once here, with the transformer path, so nothing
+    # downstream (GeoJSON writing, the clip mask, the manifest bounds) has to
+    # send it through GeoDataFrame.to_crs().
+    boundary = reproject_polygonal(load_va_boundary(cfg["paths"]["va_boundary"]), EPSG_4326)
     _write_geojson(output_dir / "boundary.geojson", boundary)
 
     pipelines = load_vector_collection(
@@ -298,7 +343,7 @@ def build_deck_assets(cfg: dict[str, Any]) -> Path:
     ghg = _ghg_points(cfg, boundary)
     _write_geojson(output_dir / "ghg_2023.geojson", ghg)
 
-    bounds = boundary.to_crs(EPSG_4326).total_bounds
+    bounds = boundary.total_bounds
     minx, miny, maxx, maxy = [float(v) for v in bounds]
     manifest = {
         "center": [(minx + maxx) / 2.0, (miny + maxy) / 2.0],

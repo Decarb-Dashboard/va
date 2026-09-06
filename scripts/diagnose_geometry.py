@@ -25,9 +25,11 @@ import shapely.ops
 from scripts.config import load_yaml_config
 from scripts.io import (
     describe_geometry,
+    expected_reprojected_bounds,
     geometry_report,
     load_va_boundary,
     load_vector_collection,
+    reproject_polygonal,
     sanitize_geometries,
 )
 
@@ -83,10 +85,16 @@ def diagnose_boundary(cfg: dict[str, Any], target_crs: str) -> None:
 
     reprojected = cleaned
     if str(cleaned.crs) != target_crs:
-        reprojected = cleaned.to_crs(target_crs)
-        print(f"  {describe_geometry(reprojected, f'after to_crs({target_crs})')}")
-        moved = np.abs(np.asarray(reprojected.total_bounds) - np.asarray(cleaned.total_bounds))
-        print(f"    bounds shift from reprojection: {np.round(moved, 6).tolist()}")
+        expected = expected_reprojected_bounds(cleaned, target_crs)
+        _attempt(
+            "GeoDataFrame.to_crs()  [set_coordinates path]",
+            lambda: cleaned.to_crs(target_crs).geometry.iloc[0],
+        )
+        reprojected = reproject_polygonal(cleaned, target_crs)
+        print(f"  {describe_geometry(reprojected, f'after reproject_polygonal({target_crs})')}")
+        drift = np.abs(np.asarray(reprojected.total_bounds) - np.asarray(expected))
+        print(f"    expected bounds {np.round(expected, 6).tolist()}")
+        print(f"    drift from expected: {np.round(drift, 9).tolist()}")
 
     print("\nunion baselines (all should return a MultiPolygon):")
     geometry = reprojected.geometry

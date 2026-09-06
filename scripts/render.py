@@ -21,6 +21,7 @@ from scripts.io import (
     load_emissions_csv,
     load_va_boundary,
     load_vector_collection,
+    reproject_polygonal,
 )
 from scripts.layout import apply_dark_theme, create_canvas
 from scripts.overlay import draw_overlay
@@ -43,8 +44,10 @@ def _prepare_paths(cfg: dict[str, Any]) -> dict[str, Path]:
 
 
 def _load_boundary_3857(cfg: dict[str, Any]):
+    # The outline takes the transformer path rather than GeoDataFrame.to_crs();
+    # see io.reproject_polygonal.
     boundary = load_va_boundary(cfg["paths"]["va_boundary"])
-    return ensure_crs(boundary, TARGET_CRS)
+    return reproject_polygonal(boundary, TARGET_CRS)
 
 
 def _load_pipelines_3857(cfg: dict[str, Any]):

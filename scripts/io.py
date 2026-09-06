@@ -9,7 +9,9 @@ from typing import Iterable, Iterator
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyproj
 import shapely
+import shapely.ops
 from shapely.errors import GEOSException
 from shapely.geometry.base import BaseGeometry
 from shapely.validation import make_valid
@@ -78,6 +80,50 @@ def collapse_to_dimension(geometry: BaseGeometry | None, dimension: int) -> Base
     if merged is None or merged.is_empty:
         return None
     return merged
+
+
+def reproject_polygonal(gdf: gpd.GeoDataFrame, target_crs: Any) -> gpd.GeoDataFrame:
+    """Reproject polygonal geometry without GeoPandas' `set_coordinates` path.
+
+    `GeoDataFrame.to_crs()` rebuilds geometry by writing a transformed
+    coordinate array back with `shapely.set_coordinates()`, which raises
+    "IllegalArgumentException: Points of LinearRing do not form a closed
+    linestring" on some shapely/GEOS builds when the transformed first and last
+    ring vertices no longer compare equal. `shapely.ops.transform()` rebuilds
+    rings through the geometry constructors, which close them, so a state
+    outline survives the transform on every stack.
+
+    This is a real coordinate transformation (pyproj, `always_xy=True`), not a
+    CRS relabel.
+    """
+    if gdf.crs is None:
+        raise ValueError("Cannot reproject a layer with no CRS.")
+    if str(gdf.crs) == str(target_crs):
+        return gdf
+
+    transformer = pyproj.Transformer.from_crs(gdf.crs, target_crs, always_xy=True)
+    projected = [
+        None if geometry is None or geometry.is_empty
+        else shapely.ops.transform(transformer.transform, geometry)
+        for geometry in gdf.geometry
+    ]
+
+    geometry = gpd.GeoSeries(projected, index=gdf.index, crs=target_crs)
+    attributes = gdf.drop(columns=[gdf.geometry.name]).copy()
+    return gpd.GeoDataFrame(attributes, geometry=geometry, crs=target_crs)
+
+
+def expected_reprojected_bounds(
+    gdf: gpd.GeoDataFrame, target_crs: Any
+) -> tuple[float, float, float, float]:
+    """Where `gdf`'s bounding box lands in `target_crs`, for a sanity check."""
+    minx, miny, maxx, maxy = gdf.total_bounds
+    transformer = pyproj.Transformer.from_crs(gdf.crs, target_crs, always_xy=True)
+    xs, ys = transformer.transform(
+        [minx, minx, maxx, maxx],
+        [miny, maxy, miny, maxy],
+    )
+    return (min(xs), min(ys), max(xs), max(ys))
 
 
 def describe_geometry(gdf: gpd.GeoDataFrame, tag: str) -> str:
