@@ -89,7 +89,12 @@ web:
   fit_padding_px: 56
   # How far past the fit-the-state zoom the user may zoom out / in.
   zoom_out_allowance: 0.6
-  max_zoom: 12.5
+  # Deepest zoom the map allows. The on-map readout shows the current level and
+  # its percentage of this range, so a usable ceiling can be read off the map.
+  max_zoom: 15.0
+  # Deepest elevation tile level fetched for the 3D mesh; beyond it the last
+  # level is stretched. Raising it sharpens deep zoom at the cost of requests.
+  terrain_max_tile_zoom: 13
 
   # Base map surface for the terrain.
   #

@@ -46,6 +46,11 @@ const READY_TIMEOUT_MS = 20000;
 const ICON_SIZE_MIN_PX = 20;
 const ICON_SIZE_MAX_PX = 54;
 
+// Facilities and reference layers are flat (z = 0) while the terrain mesh has
+// real elevation, so depth testing hides them behind ridges as you zoom in.
+// Drawing them with the depth test disabled keeps them on top at every zoom.
+const OVERLAY_PARAMETERS = {depthCompare: 'always'};
+
 const ELEVATION_TILE_URL =
   'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 
@@ -255,6 +260,22 @@ function clampToVirginia(viewState, bounds, zoomRange) {
   };
 }
 
+/**
+ * Show the current zoom as a level and as a percentage of the allowed range,
+ * so the usable limit can be read off the map and set in config.yml.
+ */
+function makeZoomReadout(zoomRange) {
+  const element = document.getElementById('zoom-readout');
+  return (zoom) => {
+    if (!element) return;
+    const [min, max] = zoomRange;
+    const span = Math.max(max - min, 1e-6);
+    const percent = Math.round(clamp((zoom - min) / span, 0, 1) * 100);
+    element.textContent = `z ${zoom.toFixed(1)} · ${percent}%`;
+    element.title = `Zoom ${zoom.toFixed(2)} of ${min.toFixed(2)}–${max.toFixed(2)} (web.max_zoom in config.yml)`;
+  };
+}
+
 /* ---------------------------------------------------------------------- app */
 
 (async () => {
@@ -388,7 +409,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
           elevationDecoder: {rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768},
           strategy: 'no-overlap',
           minZoom: 0,
-          maxZoom: 12,
+          maxZoom: Number(webCfg.terrain_max_tile_zoom ?? 13),
           wireframe: false,
           color: meshColor,
           material: {ambient: 0.45, diffuse: 0.6, shininess: 8, specularColor: [90, 100, 115]},
@@ -416,6 +437,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         getLineColor: COLORS.boundary,
         getLineWidth: 120,
         lineWidthMinPixels: 1.2,
+        parameters: OVERLAY_PARAMETERS,
         pickable: false
       }),
       new GeoJsonLayer({
@@ -426,6 +448,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         getLineColor: COLORS.places,
         getLineWidth: 40,
         lineWidthMinPixels: 1,
+        parameters: OVERLAY_PARAMETERS,
         pickable: true
       }),
       new GeoJsonLayer({
@@ -436,6 +459,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         getLineColor: COLORS.railroads,
         getLineWidth: 50,
         lineWidthMinPixels: 1,
+        parameters: OVERLAY_PARAMETERS,
         pickable: true
       }),
       new GeoJsonLayer({
@@ -446,6 +470,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         getLineColor: COLORS.roads,
         getLineWidth: 95,
         lineWidthMinPixels: 1,
+        parameters: OVERLAY_PARAMETERS,
         pickable: true
       }),
       // Pipelines read as a single bright line with a soft halo underneath.
@@ -460,6 +485,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         lineWidthMaxPixels: 14,
         lineJointRounded: true,
         lineCapRounded: true,
+        parameters: OVERLAY_PARAMETERS,
         pickable: false
       }),
       new GeoJsonLayer({
@@ -473,6 +499,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         lineWidthMaxPixels: 5,
         lineJointRounded: true,
         lineCapRounded: true,
+        parameters: OVERLAY_PARAMETERS,
         pickable: true
       }),
       new GeoJsonLayer({
@@ -483,6 +510,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         getPointRadius: 1600,
         pointRadiusMinPixels: 3,
         getFillColor: COLORS.ports,
+        parameters: OVERLAY_PARAMETERS,
         pickable: true
       }),
       new IconLayer({
@@ -497,6 +525,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
           return ICON_SIZE_MIN_PX + normalized * (ICON_SIZE_MAX_PX - ICON_SIZE_MIN_PX);
         },
         sizeUnits: 'pixels',
+        parameters: OVERLAY_PARAMETERS,
         pickable: true
       })
     ].filter(Boolean);
@@ -516,6 +545,8 @@ function clampToVirginia(viewState, bounds, zoomRange) {
       bearing: Number(webCfg.initial_bearing ?? 0)
     };
     let viewState = {...initialViewState};
+    let showZoom = makeZoomReadout(zoomRange);
+    showZoom(initialViewState.zoom);
 
     /* ---------------------------------------------------- readiness tracking */
 
@@ -543,6 +574,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
       onViewStateChange: ({viewState: next}) => {
         viewState = clampToVirginia(next, bounds, zoomRange);
         deckInstance.setProps({viewState});
+        showZoom(viewState.zoom);
         return viewState;
       },
       onAfterRender: () => {
@@ -579,6 +611,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
     const resetView = () => {
       const refit = fitViewState(bounds, fitPadding);
       zoomRange = [refit.zoom - zoomOutAllowance, Number(webCfg.max_zoom ?? 12.5)];
+      showZoom = makeZoomReadout(zoomRange);
       viewState = {
         ...refit,
         minZoom: zoomRange[0],
@@ -587,6 +620,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         bearing: Number(webCfg.initial_bearing ?? 0)
       };
       deckInstance.setProps({viewState});
+      showZoom(viewState.zoom);
     };
 
     document.getElementById('reset-view')?.addEventListener('click', resetView);
@@ -604,6 +638,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
     window.addEventListener('resize', () => {
       const refit = fitViewState(bounds, fitPadding);
       zoomRange = [refit.zoom - zoomOutAllowance, Number(webCfg.max_zoom ?? 12.5)];
+      showZoom = makeZoomReadout(zoomRange);
       viewState = {
         ...viewState,
         minZoom: zoomRange[0],
@@ -611,6 +646,7 @@ function clampToVirginia(viewState, bounds, zoomRange) {
         zoom: clamp(viewState.zoom, zoomRange[0], zoomRange[1])
       };
       deckInstance.setProps({viewState});
+      showZoom(viewState.zoom);
     });
   } catch (error) {
     console.error(error);

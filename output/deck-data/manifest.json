@@ -79,7 +79,8 @@
     "initial_bearing": 0,
     "fit_padding_px": 56,
     "zoom_out_allowance": 0.6,
-    "max_zoom": 12.5,
+    "max_zoom": 15.0,
+    "terrain_max_tile_zoom": 13,
     "basemap": {
       "mode": "texture",
       "url": "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png?key={api_key}",

@@ -98,7 +98,9 @@ Then open `http://localhost:8000/web/` to view the interactive deck.gl map with:
 - A hover-to-open legend, a loading bar, and summary charts in the side panel
 
 Map controls: drag to pan, scroll to zoom, **Shift + click + drag to rotate and tilt**, and *Reset*
-to return to the flat, whole-state view.
+to return to the flat, whole-state view. The controls bar shows the current zoom level and its
+percentage of the allowed range, so a usable ceiling can be read off the map and set as
+`web.max_zoom` in `config.yml`.
 
 ---
 

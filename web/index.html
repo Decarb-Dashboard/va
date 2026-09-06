@@ -107,7 +107,6 @@
       }
       .chart-wrap.bar { height: 140px; }
       .chart-wrap.doughnut { height: 190px; }
-      .chart-wrap.line { height: 170px; }
 
       .panel-footnote {
         font-size: 10px;
@@ -302,6 +301,12 @@
         padding: 1px 5px;
       }
       #controls-hint .sep { color: #3f4d5f; }
+      .zoom-readout {
+        color: #d8e2ee;
+        font-variant-numeric: tabular-nums;
+        min-width: 74px;
+        cursor: default;
+      }
       #reset-view {
         font-family: inherit;
         font-size: 10px;
@@ -473,6 +478,8 @@
           <span class="hide-narrow">Scroll to zoom</span>
           <span class="sep hide-narrow">·</span>
           <span><kbd>Shift</kbd> + click + drag to rotate &amp; tilt</span>
+          <span class="sep">·</span>
+          <span id="zoom-readout" class="zoom-readout">z --</span>
           <button id="reset-view" title="Back to the flat, full-state view">Reset</button>
         </div>
       </div>
@@ -512,14 +519,6 @@
           <h2>Emissions by Sector</h2>
           <div class="chart-wrap doughnut">
             <canvas id="chart-sectors"></canvas>
-          </div>
-        </div>
-
-        <!-- Emissions Distribution Line/Bar -->
-        <div class="card">
-          <h2>Facility Size Distribution</h2>
-          <div class="chart-wrap line">
-            <canvas id="chart-distribution"></canvas>
           </div>
         </div>
 

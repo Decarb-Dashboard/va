@@ -268,62 +268,6 @@ function buildSectorChart(features) {
   });
 }
 
-function buildDistributionChart(features) {
-  const bins = [
-    {label: '<10k', min: 0, max: 10000},
-    {label: '10k-50k', min: 10000, max: 50000},
-    {label: '50k-100k', min: 50000, max: 100000},
-    {label: '100k-500k', min: 100000, max: 500000},
-    {label: '500k-1M', min: 500000, max: 1000000},
-    {label: '>1M', min: 1000000, max: Infinity}
-  ];
-
-  const counts = bins.map(bin =>
-    features.filter(f => {
-      const v = f.properties.ghg_quantity_metric_tons_co2e || 0;
-      return v >= bin.min && v < bin.max;
-    }).length
-  );
-
-  new Chart(document.getElementById('chart-distribution'), {
-    type: 'bar',
-    data: {
-      labels: bins.map(b => b.label),
-      datasets: [{
-        data: counts,
-        backgroundColor: 'rgba(157, 0, 255, 0.5)',
-        borderColor: 'rgba(157, 0, 255, 0.9)',
-        borderWidth: 1,
-        borderRadius: 3
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {display: false},
-        tooltip: {
-          callbacks: {
-            label: ctx => `${ctx.raw} facilities`
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {display: false},
-          ticks: {color: '#7a8a9e', font: {size: 10}},
-          title: {display: true, text: 'tCO2e / year', color: '#7a8a9e', font: {size: 10}}
-        },
-        y: {
-          grid: {color: 'rgba(162,186,212,0.08)'},
-          ticks: {color: '#7a8a9e', font: {size: 10}, stepSize: 1},
-          title: {display: true, text: 'Count', color: '#7a8a9e', font: {size: 10}}
-        }
-      }
-    }
-  });
-}
-
 // --- Facility timeline modal ---
 
 // Parse CSV text into array of objects
@@ -490,7 +434,6 @@ function init(features) {
   populateStats(features);
   buildTopEmittersChart(features);
   buildSectorChart(features);
-  buildDistributionChart(features);
   loadAllYearsData();
 }
 
