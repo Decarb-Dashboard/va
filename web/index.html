@@ -23,6 +23,7 @@
       }
       #app {
         width: 100%; height: 100%;
+        position: relative;
       }
       #panel {
         flex: 0 0 35%;
@@ -72,38 +73,6 @@
         margin-bottom: 12px;
       }
 
-      /* Legend */
-      .legend-list {
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-      }
-      .legend-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        color: #b0bfcf;
-      }
-      .legend-swatch {
-        width: 14px;
-        height: 4px;
-        border-radius: 2px;
-        flex-shrink: 0;
-      }
-      .legend-swatch.circle {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-      }
-      .legend-swatch.icon {
-        width: 16px;
-        height: 16px;
-        border-radius: 3px;
-        background-size: cover;
-        background-position: center;
-      }
-
       /* Stats row */
       .stats-row {
         display: grid;
@@ -136,9 +105,17 @@
         position: relative;
         width: 100%;
       }
-      .chart-wrap.bar { height: 200px; }
+      .chart-wrap.bar { height: 140px; }
       .chart-wrap.doughnut { height: 190px; }
       .chart-wrap.line { height: 170px; }
+
+      .panel-footnote {
+        font-size: 10px;
+        line-height: 1.5;
+        color: #63738a;
+        padding-bottom: 4px;
+      }
+      .panel-footnote a { color: #7a8a9e; }
 
       /* Tooltip (deck.gl) */
       .tooltip {
@@ -153,13 +130,254 @@
         max-width: 280px;
       }
 
+      /* ---------------------------------------------------- map overlays --- */
+      .map-overlay {
+        position: absolute;
+        z-index: 5;
+        font-size: 11px;
+      }
+
+      /* Legend: compact chip that opens on hover (or tap) */
+      #legend {
+        left: 14px;
+        bottom: 14px;
+        max-width: 468px;
+      }
+      .legend-shell {
+        background: rgba(10, 15, 22, 0.88);
+        border: 1px solid rgba(162, 186, 212, 0.22);
+        border-radius: 8px;
+        backdrop-filter: blur(6px);
+        overflow: hidden;
+      }
+      .legend-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        cursor: pointer;
+        color: #b0bfcf;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        user-select: none;
+        background: none;
+        border: none;
+        width: 100%;
+        text-align: left;
+        font-family: inherit;
+      }
+      .legend-toggle:hover { color: #e8f0fa; }
+      .legend-toggle .chevron {
+        margin-left: auto;
+        font-size: 9px;
+        color: #7a8a9e;
+        transition: transform 0.18s ease;
+      }
+      .legend-body {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 0.18s ease;
+      }
+      .legend-body > div { overflow: hidden; }
+      #legend:hover .legend-body,
+      #legend.open .legend-body { grid-template-rows: 1fr; }
+      #legend:hover .chevron,
+      #legend.open .chevron { transform: rotate(180deg); }
+
+      .legend-inner {
+        padding: 2px 11px 11px;
+        max-height: 74vh;
+        overflow-y: auto;
+      }
+      .legend-inner::-webkit-scrollbar { width: 5px; }
+      .legend-inner::-webkit-scrollbar-thumb { background: rgba(162,186,212,0.25); border-radius: 3px; }
+      .legend-section + .legend-section { margin-top: 10px; }
+      .legend-section h3 {
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: #7a8a9e;
+        margin: 0 0 6px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(162, 186, 212, 0.12);
+      }
+      .legend-section:first-child h3 { border-top: none; padding-top: 0; }
+      .legend-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      /* Long facility lists split into two columns so the legend stays short. */
+      .legend-list.two-col {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px 16px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: #b0bfcf;
+        line-height: 1.3;
+      }
+      .legend-item .count {
+        margin-left: auto;
+        color: #6d7f95;
+        font-variant-numeric: tabular-nums;
+        font-size: 10px;
+        padding-left: 6px;
+      }
+      .legend-swatch {
+        width: 16px;
+        height: 3px;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .legend-swatch.glow {
+        box-shadow: 0 0 5px 1px rgba(157, 0, 255, 0.75);
+      }
+      .legend-swatch.circle {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin: 0 4px;
+      }
+      .legend-swatch.icon {
+        width: 16px;
+        height: 16px;
+        object-fit: contain;
+        flex-shrink: 0;
+      }
+      .legend-swatch.relief {
+        width: 16px;
+        height: 10px;
+        border-radius: 2px;
+        background: linear-gradient(90deg, #6b8497 0%, #8c9e80 45%, #ad9573 75%, #d1bc9e 100%);
+      }
+      .legend-size-scale {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        padding: 2px 0 0 2px;
+      }
+      .legend-size-scale .dot {
+        border-radius: 50%;
+        background: rgba(77, 208, 225, 0.25);
+        border: 1px solid rgba(77, 208, 225, 0.8);
+      }
+      .legend-size-note {
+        font-size: 10px;
+        color: #6d7f95;
+        margin-top: 6px;
+        line-height: 1.4;
+      }
+
+      /* Controls hint */
+      #controls-hint {
+        right: 14px;
+        bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 11px;
+        background: rgba(10, 15, 22, 0.88);
+        border: 1px solid rgba(162, 186, 212, 0.22);
+        border-radius: 8px;
+        backdrop-filter: blur(6px);
+        color: #93a5ba;
+        font-size: 11px;
+      }
+      #controls-hint kbd {
+        font-family: inherit;
+        font-size: 10px;
+        color: #d8e2ee;
+        background: rgba(162, 186, 212, 0.14);
+        border: 1px solid rgba(162, 186, 212, 0.3);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+      #controls-hint .sep { color: #3f4d5f; }
+      #reset-view {
+        font-family: inherit;
+        font-size: 10px;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: #b0bfcf;
+        background: rgba(162, 186, 212, 0.1);
+        border: 1px solid rgba(162, 186, 212, 0.25);
+        border-radius: 5px;
+        padding: 3px 8px;
+        cursor: pointer;
+      }
+      #reset-view:hover { color: #e8f0fa; background: rgba(162, 186, 212, 0.2); }
+
+      @media (max-width: 900px) {
+        #controls-hint .hide-narrow { display: none; }
+      }
+
+      /* Loading overlay */
+      #loading {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: #0b0f14;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.45s ease;
+      }
+      #loading.done { opacity: 0; pointer-events: none; }
+      .loading-inner {
+        width: min(340px, 76vw);
+        text-align: center;
+      }
+      .loading-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #e8f0fa;
+        letter-spacing: -0.2px;
+      }
+      .loading-sub {
+        font-size: 11px;
+        color: #7a8a9e;
+        margin-top: 4px;
+      }
+      .loading-track {
+        margin-top: 18px;
+        height: 4px;
+        width: 100%;
+        border-radius: 3px;
+        background: rgba(162, 186, 212, 0.14);
+        overflow: hidden;
+      }
+      .loading-bar {
+        height: 100%;
+        width: 0%;
+        border-radius: 3px;
+        background: linear-gradient(90deg, #4dd0e1, #9d6bff);
+        transition: width 0.25s ease;
+      }
+      .loading-status {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #7a8a9e;
+        min-height: 15px;
+      }
+      #loading.failed .loading-bar { background: #ff6b6b; }
+      #loading.failed .loading-status { color: #ff9b9b; }
+
       /* Facility detail modal */
       .modal-backdrop {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.6);
         z-index: 1000;
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
         opacity: 0;
@@ -232,7 +450,33 @@
     <div id="layout">
       <div id="map-container">
         <div id="app"></div>
+
+        <!-- Legend: collapsed chip, opens on hover or tap -->
+        <div class="map-overlay" id="legend">
+          <div class="legend-shell">
+            <button class="legend-toggle" id="legend-toggle" aria-expanded="false" aria-controls="legend-body">
+              <span>Legend</span>
+              <span class="chevron">▲</span>
+            </button>
+            <div class="legend-body" id="legend-body">
+              <div>
+                <div class="legend-inner" id="legend-inner"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation hint -->
+        <div class="map-overlay" id="controls-hint">
+          <span class="hide-narrow">Drag to pan</span>
+          <span class="sep hide-narrow">·</span>
+          <span class="hide-narrow">Scroll to zoom</span>
+          <span class="sep hide-narrow">·</span>
+          <span><kbd>Shift</kbd> + click + drag to rotate &amp; tilt</span>
+          <button id="reset-view" title="Back to the flat, full-state view">Reset</button>
+        </div>
       </div>
+
       <div id="panel">
         <div class="panel-header">
           <h1>Virginia GHG Dashboard</h1>
@@ -255,15 +499,9 @@
           </div>
         </div>
 
-        <!-- Legend -->
-        <div class="card" id="legend-card">
-          <h2>Map Legend</h2>
-          <div class="legend-list" id="legend-list"></div>
-        </div>
-
         <!-- Top Emitters Bar Chart -->
         <div class="card">
-          <h2>Top 10 Emitters</h2>
+          <h2>Top 5 Emitters</h2>
           <div class="chart-wrap bar">
             <canvas id="chart-top-emitters"></canvas>
           </div>
@@ -284,6 +522,22 @@
             <canvas id="chart-distribution"></canvas>
           </div>
         </div>
+
+        <div class="panel-footnote">
+          Click any facility for its reported emissions history. Emissions:
+          <a href="https://ghgdata.epa.gov/flight/" target="_blank" rel="noopener">EPA GHGRP FLIGHT</a>,
+          reporting year 2023. Terrain: AWS Terrarium elevation tiles.
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading">
+      <div class="loading-inner">
+        <div class="loading-title">Virginia GHG Dashboard</div>
+        <div class="loading-sub">134 reporting facilities · 2023</div>
+        <div class="loading-track"><div class="loading-bar" id="loading-fill"></div></div>
+        <div class="loading-status" id="loading-status">Starting…</div>
       </div>
     </div>
 
@@ -303,7 +557,6 @@
     </div>
 
     <script src="https://unpkg.com/deck.gl@^9.0.0/dist.min.js"></script>
-    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script type="module" src="./map.js"></script>
     <script type="module" src="./dashboard.js"></script>

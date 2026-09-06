@@ -1,16 +1,6 @@
 // Dashboard panel: legend, summary stats, and charts
 // Waits for map.js to expose GHG feature data via window.__ghgFeatures
 
-const LAYER_LEGEND = [
-  {label: 'State boundary', color: 'rgba(143,166,189,0.86)', type: 'line'},
-  {label: 'Natural gas pipelines', color: 'rgba(157,0,255,0.47)', type: 'line'},
-  {label: 'Railroads', color: 'rgba(215,221,230,0.36)', type: 'line'},
-  {label: 'Primary roads', color: 'rgba(255,210,122,0.47)', type: 'line'},
-  {label: 'Incorporated places', color: 'rgba(154,167,180,0.24)', type: 'line'},
-  {label: 'Principal ports', color: 'rgba(77,208,225,0.63)', type: 'circle'},
-  {label: 'GHG facilities', color: null, type: 'icon'}
-];
-
 // Sector labels derived from EPA GHGRP subpart codes
 const SECTOR_MAP = {
   C: 'General Combustion',
@@ -47,27 +37,126 @@ function classifyFacility(subparts) {
   return SECTOR_MAP[specific] || 'Other';
 }
 
-function buildLegend() {
-  const list = document.getElementById('legend-list');
-  if (!list) return;
-  LAYER_LEGEND.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'legend-item';
+const compactTons = (tons) => {
+  const value = Number(tons) || 0;
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `${Math.round(value / 1e3)}k`;
+  return String(Math.round(value));
+};
 
+function legendRow(swatch, label, trailing) {
+  const row = document.createElement('div');
+  row.className = 'legend-item';
+  row.appendChild(swatch);
+
+  const text = document.createElement('span');
+  text.textContent = label;
+  row.appendChild(text);
+
+  if (trailing) {
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = trailing;
+    row.appendChild(count);
+  }
+  return row;
+}
+
+function legendSection(title) {
+  const section = document.createElement('div');
+  section.className = 'legend-section';
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  section.appendChild(heading);
+  const list = document.createElement('div');
+  list.className = 'legend-list';
+  section.appendChild(list);
+  return {section, list};
+}
+
+/**
+ * Render the map legend into the overlay chip. Everything the map draws is
+ * listed: facility icon categories present in the data, the size encoding and
+ * the reference layers.
+ */
+function buildLegend(legend) {
+  const host = document.getElementById('legend-inner');
+  if (!host || !legend) return;
+  host.innerHTML = '';
+
+  const icons = legend.icons || [];
+  const facilities = legendSection(`Facilities (${icons.reduce((n, i) => n + i.count, 0)})`);
+  if (icons.length > 10) {
+    facilities.list.classList.add('two-col');
+  }
+  icons.forEach((entry) => {
+    const swatch = document.createElement('img');
+    swatch.className = 'legend-swatch icon';
+    swatch.src = entry.url;
+    swatch.alt = '';
+    facilities.list.appendChild(legendRow(swatch, entry.label, `${entry.count}`));
+  });
+  host.appendChild(facilities.section);
+
+  const scale = legend.sizeScale;
+  if (scale) {
+    const sizing = legendSection('Icon size');
+    const row = document.createElement('div');
+    row.className = 'legend-size-scale';
+    const stops = [
+      {tons: scale.minTons, frac: 0},
+      {tons: (scale.maxTons || 0) / 8, frac: Math.sqrt(1 / 8)},
+      {tons: scale.maxTons, frac: 1}
+    ];
+    stops.forEach((stop) => {
+      const wrap = document.createElement('div');
+      wrap.style.textAlign = 'center';
+      const dot = document.createElement('div');
+      const px = Math.round((scale.minPx + stop.frac * (scale.maxPx - scale.minPx)) * 0.42);
+      dot.className = 'dot';
+      dot.style.width = `${px}px`;
+      dot.style.height = `${px}px`;
+      dot.style.margin = '0 auto 3px';
+      const label = document.createElement('div');
+      label.style.fontSize = '9px';
+      label.style.color = '#6d7f95';
+      label.textContent = compactTons(stop.tons);
+      wrap.appendChild(dot);
+      wrap.appendChild(label);
+      row.appendChild(wrap);
+    });
+    sizing.list.appendChild(row);
+    const note = document.createElement('div');
+    note.className = 'legend-size-note';
+    note.textContent = 'Icon area scales with reported tCO2e.';
+    sizing.list.appendChild(note);
+    host.appendChild(sizing.section);
+  }
+
+  const layers = legendSection('Reference layers');
+  (legend.layers || []).forEach((item) => {
     const swatch = document.createElement('span');
-    swatch.className = 'legend-swatch' + (item.type === 'circle' ? ' circle' : '') + (item.type === 'icon' ? ' icon' : '');
-    if (item.type === 'icon') {
-      swatch.style.backgroundImage = 'url(../geo-icons/small/icon_v2_C.png)';
+    if (item.type === 'relief') {
+      swatch.className = 'legend-swatch relief';
+    } else if (item.type === 'circle') {
+      swatch.className = 'legend-swatch circle';
+      swatch.style.background = item.color;
     } else {
+      swatch.className = 'legend-swatch' + (item.glow ? ' glow' : '');
       swatch.style.background = item.color;
     }
+    layers.list.appendChild(legendRow(swatch, item.label));
+  });
+  host.appendChild(layers.section);
+}
 
-    const label = document.createElement('span');
-    label.textContent = item.label;
-
-    row.appendChild(swatch);
-    row.appendChild(label);
-    list.appendChild(row);
+// The legend opens on hover; a click pins it open for touch input.
+const legendEl = document.getElementById('legend');
+const legendToggle = document.getElementById('legend-toggle');
+if (legendEl && legendToggle) {
+  legendToggle.addEventListener('click', () => {
+    const open = legendEl.classList.toggle('open');
+    legendToggle.setAttribute('aria-expanded', String(open));
   });
 }
 
@@ -81,16 +170,18 @@ function populateStats(features) {
   document.getElementById('stat-sectors').textContent = sectors.size;
 }
 
+const TOP_EMITTER_COUNT = 5;
+
 function buildTopEmittersChart(features) {
   const sorted = [...features].sort((a, b) =>
     (b.properties.ghg_quantity_metric_tons_co2e || 0) - (a.properties.ghg_quantity_metric_tons_co2e || 0)
   );
-  const top10 = sorted.slice(0, 10);
-  const labels = top10.map(f => {
+  const top = sorted.slice(0, TOP_EMITTER_COUNT);
+  const labels = top.map(f => {
     const name = f.properties.facility_name || 'Unknown';
     return name.length > 22 ? name.slice(0, 20) + '...' : name;
   });
-  const data = top10.map(f => (f.properties.ghg_quantity_metric_tons_co2e || 0) / 1000);
+  const data = top.map(f => (f.properties.ghg_quantity_metric_tons_co2e || 0) / 1000);
 
   new Chart(document.getElementById('chart-top-emitters'), {
     type: 'bar',
@@ -395,7 +486,7 @@ document.addEventListener('keydown', (e) => {
 window.__onFacilityClick = openFacilityModal;
 
 function init(features) {
-  buildLegend();
+  buildLegend(window.__ghgLegend);
   populateStats(features);
   buildTopEmittersChart(features);
   buildSectorChart(features);

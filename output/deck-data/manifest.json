@@ -1,13 +1,13 @@
 {
   "center": [
-    -79.45883464131043,
-    38.00337418563032
+    -79.45883950000001,
+    38.003375
   ],
   "bounds": [
-    -83.675413105578,
-    36.540736603736086,
-    -75.24225617704288,
-    39.46601176752455
+    -83.675413,
+    36.540738,
+    -75.242266,
+    39.466012
   ],
   "terrain_exaggeration": 1.8,
   "files": {
@@ -25,22 +25,71 @@
     "by_subparts": {
       "C": "icon_v2_C",
       "C,HH": "icon_v2_C_HH",
+      "HH": "icon_v2_HH",
       "C,Q": "icon_v2_C_Q",
       "C,W": "icon_v2_C_W",
+      "NN,W": "icon_v2_NN_W",
       "C,S": "icon_v2_C_S",
       "C,I": "icon_v2_C_I",
       "C,II": "icon_v2_C_II",
       "AA,C": "icon_v2_AA_C",
+      "AA,C,TT": "icon_v2_AA_C",
       "DD": "icon_v2_DD",
       "C,N": "icon_v2_C_N",
       "TT": "icon_v2_TT",
-      "FF": "coal.jpg",
-      "D": "power.jpg",
-      "C,D": "power.jpg",
-      "C,G,PP": "chemical.jpg",
-      "C,H": "cement.jpg",
       "C,TT": "icon_v2_TT",
-      "AA,C,TT": "icon_v2_AA_C"
+      "FF": "icon_v2_FF",
+      "D": "icon_v2_D",
+      "C,D": "icon_v2_D",
+      "C,G,PP": "icon_v2_G_PP",
+      "C,H": "icon_v2_H"
+    },
+    "labels": {
+      "icon_v2_C": "Stationary combustion",
+      "icon_v2_D": "Power generation",
+      "icon_v2_C_HH": "Landfill + combustion",
+      "icon_v2_HH": "Municipal landfill",
+      "icon_v2_TT": "Industrial waste landfill",
+      "icon_v2_NN_W": "Natural gas supply",
+      "icon_v2_C_W": "Petroleum & natural gas",
+      "icon_v2_AA_C": "Pulp & paper",
+      "icon_v2_C_II": "Industrial wastewater",
+      "icon_v2_C_Q": "Iron & steel",
+      "icon_v2_C_S": "Lime manufacturing",
+      "icon_v2_C_N": "Glass production",
+      "icon_v2_C_I": "Electronics manufacturing",
+      "icon_v2_G_PP": "Ammonia & CO2 supply",
+      "icon_v2_H": "Cement production",
+      "icon_v2_FF": "Underground coal mine",
+      "icon_v2_DD": "Electrical equipment (SF6)"
     }
-  }
+  },
+  "style": {
+    "background": "#0b0f14",
+    "boundary_edgecolor": "#8fa6bd",
+    "pipelines_color": "#c46bff",
+    "pipelines_glow_color": "#9D00FF",
+    "railroads_color": "#d7dde6",
+    "primary_roads_color": "#ffd27a",
+    "incorporated_places_color": "#9aa7b4",
+    "principal_ports_color": "#4dd0e1"
+  },
+  "web": {
+    "initial_pitch": 0,
+    "initial_bearing": 0,
+    "fit_padding_px": 56,
+    "zoom_out_allowance": 0.6,
+    "max_zoom": 12.5,
+    "basemap": {
+      "mode": "relief",
+      "url": "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png?api_key={api_key}",
+      "api_key": ""
+    },
+    "terrain_tile_zoom": 8,
+    "terrain_mesh_color": "#28323d"
+  },
+  "emissions_range": [
+    1602.0,
+    3605193.0
+  ]
 }

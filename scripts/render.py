@@ -23,6 +23,7 @@ from scripts.io import (
     load_vector_collection,
 )
 from scripts.layout import apply_dark_theme, create_canvas
+from scripts.overlay import draw_overlay
 from scripts.map_base import draw_boundary, draw_pipelines, draw_reference_layer, set_extent_to_boundary
 from scripts.points import draw_points_with_facility_icons
 
@@ -90,8 +91,12 @@ def _draw_reference_layers(map_ax, boundary, cfg: dict[str, Any], layers: dict[s
         )
 
 
-def _save_figure(fig, path: Path, dpi: int) -> None:
-    fig.savefig(path, dpi=dpi, bbox_inches="tight", pad_inches=0)
+def _save_figure(fig, path: Path, dpi: int, *, full_frame: bool) -> None:
+    if full_frame:
+        # Keep the exact 16:9 frame: the overlay panels live in the margins.
+        fig.savefig(path, dpi=dpi, facecolor=fig.get_facecolor(), pad_inches=0)
+    else:
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", pad_inches=0)
     plt.close(fig)
 
 
@@ -355,6 +360,10 @@ def render_map(cfg: dict[str, Any]) -> Path:
     lon_col = cfg["paths"].get("emissions_lon_col", "longitude")
     points = emissions_to_gdf(points_df, lat_col=lat_col, lon_col=lon_col)
     points = ensure_crs(points, TARGET_CRS)
+    # Keep the headline counts consistent with the web build, which clips to VA.
+    points = points[points.geometry.within(boundary.geometry.union_all())].copy()
+
+    overlay_mode = str(cfg.get("layout", {}).get("mode", "overlay")).lower() == "overlay"
 
     fig, map_ax, panel_ax = create_canvas(cfg)
     apply_dark_theme(fig, map_ax, panel_ax, cfg)
@@ -364,8 +373,23 @@ def render_map(cfg: dict[str, Any]) -> Path:
         draw_pipelines(map_ax, pipelines, boundary, cfg)
     _draw_reference_layers(map_ax, boundary, cfg, reference_layers)
     draw_points_with_facility_icons(map_ax, points, cfg)
-    set_extent_to_boundary(map_ax, boundary, padding_pct=float(cfg["style"].get("padding_pct", 0.02)))
+
+    if overlay_mode:
+        figure_width, figure_height = fig.get_size_inches()
+        set_extent_to_boundary(
+            map_ax,
+            boundary,
+            padding_pct=float(cfg["style"].get("padding_pct", 0.02)),
+            figure_aspect=float(figure_width / figure_height),
+            reserve_left_frac=float(cfg["layout"].get("overlay_left_frac", 0.235)),
+            reserve_right_frac=float(cfg["layout"].get("overlay_right_frac", 0.015)),
+        )
+        draw_overlay(fig, cfg, points)
+    else:
+        set_extent_to_boundary(
+            map_ax, boundary, padding_pct=float(cfg["style"].get("padding_pct", 0.02))
+        )
 
     output_path = paths["output_png"]
-    _save_figure(fig, output_path, int(cfg["render"]["dpi"]))
+    _save_figure(fig, output_path, int(cfg["render"]["dpi"]), full_frame=overlay_mode)
     return output_path

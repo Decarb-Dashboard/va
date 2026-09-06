@@ -33,12 +33,25 @@ def draw_pipelines(
     if clipped.empty:
         return
 
+    zorder = float(style.get("pipelines_zorder", 2))
+
+    # Soft halo underneath so the pipeline network reads first on a dark map.
+    glow_width = float(style.get("pipelines_glow_linewidth", 0.0))
+    if glow_width > 0:
+        clipped.plot(
+            ax=map_ax,
+            color=style.get("pipelines_glow_color", style.get("pipelines_color", "#9D00FF")),
+            linewidth=glow_width,
+            alpha=float(style.get("pipelines_glow_alpha", 0.2)),
+            zorder=zorder - 0.05,
+        )
+
     clipped.plot(
         ax=map_ax,
         color=style.get("pipelines_color", "#4ba3c7"),
         linewidth=float(style.get("pipelines_linewidth", 0.4)),
         alpha=float(style.get("pipelines_alpha", 0.5)),
-        zorder=float(style.get("pipelines_zorder", 2)),
+        zorder=zorder,
     )
 
 
@@ -82,13 +95,40 @@ def set_extent_to_boundary(
     map_ax,
     boundary_gdf: gpd.GeoDataFrame,
     padding_pct: float,
+    *,
+    figure_aspect: float | None = None,
+    reserve_left_frac: float = 0.0,
+    reserve_right_frac: float = 0.0,
 ) -> None:
-    """Set axis extent to boundary total bounds with optional padding."""
+    """Set the axis extent to the boundary bounds.
+
+    When ``figure_aspect`` is given the extent is widened to exactly match the
+    figure so nothing is letterboxed, and ``reserve_left_frac`` /
+    ``reserve_right_frac`` keep that share of the frame clear of the state for
+    overlay panels.
+    """
     minx, miny, maxx, maxy = boundary_gdf.total_bounds
     pad_x = (maxx - minx) * float(padding_pct)
     pad_y = (maxy - miny) * float(padding_pct)
+    minx, maxx = minx - pad_x, maxx + pad_x
+    miny, maxy = miny - pad_y, maxy + pad_y
 
-    map_ax.set_xlim(minx - pad_x, maxx + pad_x)
-    map_ax.set_ylim(miny - pad_y, maxy + pad_y)
+    if figure_aspect:
+        usable = max(1e-6, 1.0 - reserve_left_frac - reserve_right_frac)
+        data_width = (maxx - minx) / usable
+        data_height = data_width / figure_aspect
+
+        if data_height < (maxy - miny):
+            data_height = maxy - miny
+            data_width = data_height * figure_aspect
+
+        left = minx - data_width * reserve_left_frac
+        center_y = (miny + maxy) / 2.0
+        map_ax.set_xlim(left, left + data_width)
+        map_ax.set_ylim(center_y - data_height / 2.0, center_y + data_height / 2.0)
+    else:
+        map_ax.set_xlim(minx, maxx)
+        map_ax.set_ylim(miny, maxy)
+
     map_ax.set_aspect("equal", adjustable="box")
     map_ax.set_axis_off()

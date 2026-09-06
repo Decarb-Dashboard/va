@@ -57,9 +57,10 @@ def _ghg_points(cfg: dict[str, Any], boundary: gpd.GeoDataFrame) -> gpd.GeoDataF
     gdf["ghg_quantity_metric_tons_co2e"] = pd.to_numeric(
         gdf.get("ghg_quantity_metric_tons_co2e"), errors="coerce"
     ).fillna(0)
-    gdf["radius_m"] = (
-        gdf["ghg_quantity_metric_tons_co2e"].clip(lower=0).pow(0.35).clip(lower=300, upper=3000)
-    )
+    # Icon/marker size scales with the square root of emissions so area, not
+    # radius, tracks the reported quantity.
+    tons = gdf["ghg_quantity_metric_tons_co2e"].clip(lower=0)
+    gdf["radius_m"] = (tons.pow(0.5) * 3.0).clip(lower=400, upper=6000)
     keep_cols = [
         "facility_name",
         "subparts",
@@ -74,11 +75,45 @@ def _ghg_points(cfg: dict[str, Any], boundary: gpd.GeoDataFrame) -> gpd.GeoDataF
 def _icon_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
     icons_cfg = cfg.get("icons", {})
     paths_cfg = cfg.get("paths", {})
+    icons_dir = Path(str(paths_cfg.get("icons_dir", "geo-icons")))
+
+    by_subparts = icons_cfg.get("by_subparts", {}) or {}
+    for subparts, icon_name in sorted(by_subparts.items()):
+        if _resolve_icon_file(icons_dir, str(icon_name)) is None:
+            print(f"[WARN] Icon for subparts '{subparts}' not found in {icons_dir}: {icon_name}")
+
     return {
-        "base_dir": str(paths_cfg.get("icons_dir", "geo-icons")),
-        "default": str(icons_cfg.get("default", "manufacturing")),
-        "by_subparts": icons_cfg.get("by_subparts", {}),
+        "base_dir": str(icons_dir),
+        "default": str(icons_cfg.get("default", "icon_v2_C")),
+        "by_subparts": by_subparts,
+        "labels": icons_cfg.get("labels", {}) or {},
     }
+
+
+def _resolve_icon_file(icons_dir: Path, icon_name: str) -> str | None:
+    """Return the on-disk filename for an icon name, or None when it is missing."""
+    if "." in icon_name:
+        return icon_name if (icons_dir / icon_name).exists() else None
+    for suffix in (".png", ".jpg", ".jpeg"):
+        if (icons_dir / f"{icon_name}{suffix}").exists():
+            return f"{icon_name}{suffix}"
+    return None
+
+
+def _style_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Colours the web map shares with the static render."""
+    style = cfg.get("style", {})
+    keys = (
+        "background",
+        "boundary_edgecolor",
+        "pipelines_color",
+        "pipelines_glow_color",
+        "railroads_color",
+        "primary_roads_color",
+        "incorporated_places_color",
+        "principal_ports_color",
+    )
+    return {key: style[key] for key in keys if key in style}
 
 
 def build_deck_assets(cfg: dict[str, Any]) -> Path:
@@ -116,6 +151,12 @@ def build_deck_assets(cfg: dict[str, Any]) -> Path:
             "ghg": "output/deck-data/ghg_2023.geojson",
         },
         "icons": _icon_manifest(cfg),
+        "style": _style_manifest(cfg),
+        "web": cfg.get("web", {}),
+        "emissions_range": [
+            float(ghg["ghg_quantity_metric_tons_co2e"].min()),
+            float(ghg["ghg_quantity_metric_tons_co2e"].max()),
+        ],
     }
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return output_dir

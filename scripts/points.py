@@ -15,22 +15,24 @@ from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 _DEFAULT_ICON_BY_SUBPARTS = {
     "C": "icon_v2_C",
     "C,HH": "icon_v2_C_HH",
+    "HH": "icon_v2_HH",
     "C,Q": "icon_v2_C_Q",
     "C,W": "icon_v2_C_W",
+    "NN,W": "icon_v2_NN_W",
     "C,S": "icon_v2_C_S",
     "C,I": "icon_v2_C_I",
     "C,II": "icon_v2_C_II",
     "AA,C": "icon_v2_AA_C",
+    "AA,C,TT": "icon_v2_AA_C",
     "DD": "icon_v2_DD",
     "C,N": "icon_v2_C_N",
     "TT": "icon_v2_TT",
-    "FF": "coal.jpg",
-    "D": "power.jpg",
-    "C,D": "power.jpg",
-    "C,G,PP": "chemical.jpg",
-    "C,H": "cement.jpg",
     "C,TT": "icon_v2_TT",
-    "AA,C,TT": "icon_v2_AA_C",
+    "FF": "icon_v2_FF",
+    "D": "icon_v2_D",
+    "C,D": "icon_v2_D",
+    "C,G,PP": "icon_v2_G_PP",
+    "C,H": "icon_v2_H",
 }
 
 
@@ -40,8 +42,8 @@ def _normalize_subparts(subparts: str) -> str:
 
 
 def _load_icon_mappings(cfg: dict[str, Any]) -> tuple[str, dict[str, str]]:
-    icon_cfg = cfg.get("geo-icons", {})
-    default_icon = str(icon_cfg.get("default", "manufacturing.jpg"))
+    icon_cfg = cfg.get("icons", {})
+    default_icon = str(icon_cfg.get("default", "icon_v2_C"))
 
     raw_mapping = icon_cfg.get("by_subparts", _DEFAULT_ICON_BY_SUBPARTS)
     mapping: dict[str, str] = {}
@@ -75,6 +77,26 @@ def _resolve_icon_path(icon_dir: Path, icon_name: str) -> Path | None:
     return None
 
 
+def build_icon_resolver(cfg: dict[str, Any]):
+    """Return `subparts -> (icon_name, icon_path|None)` using the configured mapping.
+
+    Falls back to the default icon when a mapped file is missing so a facility is
+    never silently dropped from the map.
+    """
+    icon_dir = Path(cfg.get("paths", {}).get("icons_dir", "geo-icons"))
+    default_icon, icon_by_subparts = _load_icon_mappings(cfg)
+
+    def resolve(subparts: str) -> tuple[str, Path | None]:
+        icon_name = icon_by_subparts.get(_normalize_subparts(subparts), default_icon)
+        icon_path = _resolve_icon_path(icon_dir, icon_name)
+        if icon_path is None and icon_name != default_icon:
+            icon_name = default_icon
+            icon_path = _resolve_icon_path(icon_dir, icon_name)
+        return icon_name, icon_path
+
+    return resolve
+
+
 def draw_points_with_facility_icons(
     map_ax,
     points_gdf: gpd.GeoDataFrame,
@@ -88,8 +110,7 @@ def draw_points_with_facility_icons(
     if points_gdf.empty:
         return
 
-    icon_dir = Path(cfg.get("paths", {}).get("icons_dir", "geo-icons"))
-    default_icon, icon_by_subparts = _load_icon_mappings(cfg)
+    resolve_icon = build_icon_resolver(cfg)
     base_icon_zoom = float(style.get("icon_zoom", 0.085))
     min_zoom_scale = float(style.get("icon_zoom_scale_min", 0.75))
     max_zoom_scale = float(style.get("icon_zoom_scale_max", 1.35))
@@ -115,11 +136,9 @@ def draw_points_with_facility_icons(
 
     icon_cache: dict[str, Any] = {}
     for _, row in points.iterrows():
-        subparts = row["subparts"]
-        normalized_subparts = _normalize_subparts(subparts)
-        icon_name = icon_by_subparts.get(normalized_subparts, default_icon)
-        icon_path = _resolve_icon_path(icon_dir, icon_name)
+        icon_name, icon_path = resolve_icon(row["subparts"])
         if icon_path is None:
+            print(f"[WARN] Icon '{icon_name}' not found in icons dir; skipping facility.")
             continue
 
         if icon_name not in icon_cache:

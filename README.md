@@ -2,7 +2,7 @@
 
 A geospatial rendering pipeline for producing a dark-theme dashboard map of Virginia industrial greenhouse gas (GHG) facilities.
 
-The project renders a single PNG map showing the Virginia boundary, reference layers (pipelines, railroads, roads, ports, incorporated places), terrain relief fetched from AWS Terrarium tiles, and per-facility icon overlays for reporting year 2023.
+The project renders a single PNG map showing the Virginia boundary, reference layers (pipelines, railroads, roads, ports, incorporated places), terrain relief fetched from AWS Terrarium tiles, and per-facility icon overlays for reporting year 2023. The same data drives an interactive deck.gl map under `web/`.
 
 
 ## Map preview and web version
@@ -21,6 +21,7 @@ Interactive web map: https://Decarb-Dashboard.github.io/va/web/
 - Fetches Terrarium elevation tiles at runtime to produce a multi-directional hillshade with hypsometric tinting.
 - Overlays reference infrastructure layers (pipelines, railroads, roads, ports, places).
 - Plots 2023 facility locations with subpart-based icons scaled by GHG emissions.
+- Draws an information overlay on the PNG: title, headline numbers, full legend and top 5 emitters.
 - Outputs a single PNG: `output/va_ghg_map.png`.
 
 ---
@@ -33,12 +34,15 @@ Interactive web map: https://Decarb-Dashboard.github.io/va/web/
 ├── environment.yml           # Conda environment specification
 ├── scripts/
 │   ├── build.py              # CLI entrypoint
+│   ├── build_deck.py         # deck.gl asset + manifest build
 │   ├── config.py             # YAML load + schema/path validation
 │   ├── io.py                 # Boundary/CSV loading + GeoDataFrame utilities
 │   ├── layout.py             # Figure, axes, and theme setup
 │   ├── map_base.py           # Boundary draw + extent helpers
+│   ├── overlay.py            # Title/stats/legend/top-emitters overlay
 │   ├── points.py             # Facility icon rendering
 │   ├── render.py             # Render orchestration
+│   ├── colorize_icons.py     # Line-art JPG -> neon transparent icon utility
 │   ├── resize_icons.py       # Icon preprocessing utility
 │   └── merge_pipelines.py    # GeoJSON merge utility
 ├── geo-boundaries/               # State/census boundary layers
@@ -49,7 +53,8 @@ Interactive web map: https://Decarb-Dashboard.github.io/va/web/
 │   │   └── rejects/
 │   └── flight_cleaned_va_all_years.csv
 ├── geo-layers/                   # Reference geospatial layers
-├── geo-icons/                    # Facility icon assets
+├── geo-icons/                    # Facility icon assets (original/, small/, old/)
+├── web/                      # deck.gl dashboard (index.html, map.js, terrain.js, dashboard.js)
 ├── notebooks/                # Development notebooks
 └── output/                   # Generated artifacts
 ```
@@ -87,9 +92,55 @@ python -m http.server 8000
 ```
 
 Then open `http://localhost:8000/web/` to view the interactive deck.gl map with:
-- Terrain (`TerrainLayer` + AWS Terrarium elevation tiles)
+- Shaded terrain relief built in the browser from AWS Terrarium elevation tiles (no basemap API key)
 - Geo reference layers (pipelines, railroads, roads, incorporated places, ports, VA boundary), clipped to Virginia for better performance
-- GHG facilities (`ScatterplotLayer`, 2023 only, radius scaled by emissions)
+- GHG facilities (`IconLayer`, 2023 only, icon size scaled by emissions, click for the facility's reporting history)
+- A hover-to-open legend, a loading bar, and summary charts in the side panel
+
+Map controls: drag to pan, scroll to zoom, **Shift + click + drag to rotate and tilt**, and *Reset*
+to return to the flat, whole-state view.
+
+---
+
+## Base map and API keys
+
+The terrain surface has two modes, selected in `config.yml` under `web.basemap`:
+
+| `mode` | What it draws | API key |
+| --- | --- | --- |
+| `relief` (default) | Shaded relief computed in the browser from the AWS Terrarium elevation tiles: hypsometric tint plus a multi-directional hillshade, clipped to the state — the same recipe as the static PNG. | none |
+| `texture` | Raster basemap tiles textured onto the 3D terrain mesh (`TerrainLayer`). | required by CARTO |
+
+CARTO's `basemaps.cartocdn.com` tiles now require an API key and render an
+"API KEY REQUIRED" watermark without one, which is why `relief` is the default.
+To use CARTO instead:
+
+1. Request a key at https://carto.com/basemaps/apikey/ and restrict it to your
+   site's domain in the CARTO dashboard.
+2. Set it in `config.yml`:
+
+   ```yaml
+   web:
+     basemap:
+       mode: texture
+       url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png?api_key={api_key}"
+       api_key: "YOUR_KEY"
+   ```
+
+   Paste the exact tile template CARTO gives you; `{api_key}` is substituted at
+   runtime.
+3. Rebuild the deck assets so the manifest the browser reads picks it up:
+   `python -m scripts.build --config config.yml --target deck`.
+   (The values also live in `output/deck-data/manifest.json` if you would rather
+   edit that file directly.)
+
+This is a static site, so **the key is public**: it is fetched by every visitor's
+browser. Treat it as publishable and scope it by domain. If `mode: texture` is
+set without a key, the map logs a warning and falls back to `relief` rather than
+showing the watermark.
+
+Elevation data always comes from
+`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`, in both modes.
 
 
 ---
@@ -100,11 +151,16 @@ Then open `http://localhost:8000/web/` to view the interactive deck.gl map with:
 
 - `state`: state code (currently `VA`)
 - `render`: output sizing, DPI, theme, and output filename
-- `layout`: map/panel width fractions (must sum to `1.0`)
+- `layout`: `mode` (`overlay` or `panel`), map/panel width fractions (must sum to `1.0`), and the
+  share of the frame reserved for overlay panels (`overlay_left_frac`, `overlay_right_frac`)
 - `paths`: boundary, emissions, icons, and reference layer paths
-- `icons`: subpart-to-icon filename mappings
+- `icons`: subpart-to-icon filename mappings plus `labels` (icon -> legend label, used by both the
+  PNG overlay and the web legend)
 - `terrain`: tile zoom level, vertical exaggeration, tint strength
-- `style`: map colors, alpha, line width, marker size, and extent padding
+- `web`: settings exported to the deck.gl manifest — initial pitch/bearing, fit padding, zoom
+  limits, `basemap` (see above), relief tile zoom
+- `style`: map colors, alpha, line width, marker size, extent padding, pipeline glow, and overlay
+  panel colors
 
 ### Required keys (validated at runtime)
 
@@ -208,9 +264,9 @@ Primary table: `ghg-data/flight_cleaned_va_all_years.csv`
 
 ## Roadmap (next sensible increments)
 
-- Add panel content rendering (legends, metrics, labels).
 - Add PDF export composition from rendered layers.
 - Add automated tests for config validation and render smoke checks.
+- Rebuild the browser relief at higher zoom when the user zooms past the source tile resolution.
 
 ---
 
