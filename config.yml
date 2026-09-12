@@ -1,0 +1,180 @@
+state: VA
+
+render:
+  width_px: 3600
+  height_px: 2025
+  dpi: 150
+  theme: dark
+  output_dir: output
+  output_png: va_ghg_map.png
+
+layout:
+  map_frac: 0.66
+  panel_frac: 0.34
+  # "overlay" draws the map full-bleed with information panels floating on top
+  # of the empty space around the state; "panel" keeps the map/side-panel split.
+  mode: overlay
+  # Share of the frame kept clear of the state for the overlay panels.
+  overlay_left_frac: 0.235
+  overlay_right_frac: 0.015
+
+paths:
+  va_boundary: geo-boundaries/va_boundary_20m.geojson
+  emissions_csv: ghg-data/flight_cleaned_va_all_years.csv
+  emissions_lat_col: latitude
+  emissions_lon_col: longitude
+  icons_dir: geo-icons/small
+  pipelines: geo-layers/natural_gas_pipelines/pipelines_us.gpkg
+  pipelines_layer: pipelines_us
+  railroads: geo-layers/railroads/railroads
+  primary_roads: geo-layers/primary_roads/primary_roads
+  principal_ports: geo-layers/principal_ports/principal_ports/Principal Ports_20250824_022058_chunk0000.geojson
+  incorporated_places: geo-layers/incorporated_places/incorporated_places/Incorporated Places_20250824_023605_chunk0000.geojson
+
+icons:
+  default: icon_v2_C
+
+  # Icon file -> legend label. Single source of truth for the static render
+  # overlay and the web map legend.
+  labels:
+    icon_v2_C: Stationary combustion
+    icon_v2_D: Power generation
+    icon_v2_C_HH: Landfill + combustion
+    icon_v2_HH: Municipal landfill
+    icon_v2_TT: Industrial waste landfill
+    icon_v2_NN_W: Natural gas supply
+    icon_v2_C_W: Petroleum & natural gas
+    icon_v2_AA_C: Pulp & paper
+    icon_v2_C_II: Industrial wastewater
+    icon_v2_C_Q: Iron & steel
+    icon_v2_C_S: Lime manufacturing
+    icon_v2_C_N: Glass production
+    icon_v2_C_I: Electronics manufacturing
+    icon_v2_G_PP: Ammonia & CO2 supply
+    icon_v2_H: Cement production
+    icon_v2_FF: Underground coal mine
+    icon_v2_DD: Electrical equipment (SF6)
+
+  by_subparts:
+    "C": icon_v2_C
+    "C,HH": icon_v2_C_HH
+    "HH": icon_v2_HH
+    "C,Q": icon_v2_C_Q
+    "C,W": icon_v2_C_W
+    "NN,W": icon_v2_NN_W
+    "C,S": icon_v2_C_S
+    "C,I": icon_v2_C_I
+    "C,II": icon_v2_C_II
+    "AA,C": icon_v2_AA_C
+    "AA,C,TT": icon_v2_AA_C
+    "DD": icon_v2_DD
+    "C,N": icon_v2_C_N
+    "TT": icon_v2_TT
+    "C,TT": icon_v2_TT
+    "FF": icon_v2_FF
+    "D": icon_v2_D
+    "C,D": icon_v2_D
+    "C,G,PP": icon_v2_G_PP
+    "C,H": icon_v2_H
+
+terrain:
+  tile_zoom: 9
+  vertical_exaggeration: 1.8
+  tint_strength: 1.0
+
+# Settings consumed by the deck.gl web map (exported into the deck manifest).
+web:
+  # Opening camera. The map's readout shows the live bearing and tilt, so a view
+  # worth keeping can be read off the map and pasted here.
+  initial_pitch: 30
+  initial_bearing: 15
+  fit_padding_px: 56
+  # How far past the fit-the-state zoom the user may zoom out / in.
+  zoom_out_allowance: 0.6
+  # Deepest zoom the map allows. The on-map readout shows the current level and
+  # its percentage of this range, so a usable ceiling can be read off the map.
+  max_zoom: 15.0
+  # Deepest elevation tile level fetched for the 3D mesh; beyond it the last
+  # level is stretched. Raising it sharpens deep zoom at the cost of requests.
+  terrain_max_tile_zoom: 13
+
+  # Base map surface for the terrain.
+  #
+  #   mode: relief   -> no API key. Shaded relief is computed in the browser
+  #                     from the same AWS Terrarium elevation tiles the map
+  #                     already uses (hypsometric tint + multi-directional
+  #                     hillshade, clipped to the state).
+  #   mode: texture  -> raster basemap tiles drawn onto the 3D terrain mesh.
+  #                     CARTO now requires an API key for these tiles; get one
+  #                     at https://carto.com/basemaps/apikey/ and paste it into
+  #                     `api_key` below. Anything served to the browser is
+  #                     public, so treat this key as public and restrict it to
+  #                     your site's domain in the CARTO dashboard.
+  #
+  # `{api_key}` in `url` is replaced with `api_key`. Confirm the exact query
+  # parameter CARTO gives you on the key page and paste their template here.
+  basemap:
+    mode: texture
+    url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png?key={api_key}"
+    api_key: "cb1_2z1j_1_61d75066e0c72a84b0a6dcb8"
+
+  # Zoom level of the elevation tiles used to build the shaded relief.
+  terrain_tile_zoom: 8
+  terrain_mesh_color: "#28323d"
+
+style:
+  background: "#0b0f14"
+
+  # VA outline
+  boundary_edgecolor: "#8fa6bd"
+  boundary_fill: null
+  boundary_linewidth: 1.4
+  boundary_alpha: 0.85
+
+  # Facilities (keep your orange, it's great on dark)
+  points_color: "#ff8c42"
+  # Icons are drawn at 3600 px wide; 0.085 rendered them at ~8 px.
+  icon_zoom: 0.26
+  icon_zoom_scale_min: 0.62
+  icon_zoom_scale_max: 1.5
+  icon_size_emissions_col: ghg_quantity_metric_tons_co2e
+
+  padding_pct: 0.02
+
+  # Pipelines (bright violet with a soft glow underneath so they read first)
+  pipelines_color: "#c46bff"
+  pipelines_linewidth: 1.1
+  pipelines_alpha: 0.95
+  pipelines_zorder: 2.4
+  pipelines_glow_color: "#9D00FF"
+  pipelines_glow_linewidth: 4.0
+  pipelines_glow_alpha: 0.22
+
+  # Railroads (cool light gray, subtle)
+  railroads_color: "#d7dde6"
+  railroads_linewidth: 0.45
+  railroads_alpha: 0.28
+  railroads_zorder: 2.1
+
+  # Roads
+  primary_roads_color: "#ffd27a"
+  primary_roads_linewidth: 0.85
+  primary_roads_alpha: 0.34
+  primary_roads_zorder: 2.3
+
+  # Places (quiet)
+  incorporated_places_color: "#9aa7b4"
+  incorporated_places_linewidth: 0.35
+  incorporated_places_alpha: 0.18
+  incorporated_places_zorder: 1.7
+
+  # Ports
+  principal_ports_color: "#4dd0e1"
+  principal_ports_alpha: 0.25
+  principal_ports_marker_size: 9
+  principal_ports_zorder: 2.6
+
+  # Text colours for the information overlay drawn on the static map
+  overlay_text_color: "#e8f0fa"
+  overlay_muted_color: "#8ba0b8"
+  overlay_accent_color: "#4dd0e1"
