@@ -6,6 +6,11 @@
     <title>VA GHG Dashboard - deck.gl</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
+      [hidden] { display: none !important; }
+      button:focus-visible, input:focus-visible, summary:focus-visible {
+        outline: 2px solid #00d1ff;
+        outline-offset: 3px;
+      }
       html, body {
         width: 100%; height: 100%; overflow: hidden;
         background: #0b0f14;
@@ -43,6 +48,7 @@
 
       .panel-header {
         display: flex;
+        flex-wrap: wrap;
         align-items: baseline;
         gap: 10px;
       }
@@ -106,7 +112,44 @@
         width: 100%;
       }
       .chart-wrap.bar { height: 140px; }
-      .chart-wrap.doughnut { height: 190px; }
+      .chart-wrap.doughnut { height: 150px; }
+      #sector-legend {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 190px;
+        overflow-y: auto;
+        margin-top: 14px;
+      }
+      #sector-legend .count { white-space: nowrap; }
+
+      /* Facility filters share the map's category names and colors. */
+      .filter-card h2 { margin-bottom: 6px; }
+      #filter-status { font-size: 12px; color: #d8e2ee; }
+      .filter-note { font-size: 11px; color: #93a5ba; line-height: 1.5; margin-top: 6px; }
+      .filter-details { margin-top: 12px; border: 1px solid rgba(162,186,212,0.2); border-radius: 6px; }
+      .filter-details summary { padding: 10px; cursor: pointer; font-size: 12px; color: #d8e2ee; }
+      #filter-selection { display: block; margin: 4px 0 0 14px; color: #93a5ba; font-size: 11px; }
+      .filter-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 8px; }
+      .filter-actions button {
+        font: inherit;
+        font-size: 10px;
+        color: #d8e2ee;
+        background: rgba(162,186,212,0.1);
+        border: 1px solid rgba(162,186,212,0.25);
+        border-radius: 4px;
+        padding: 5px 7px;
+        cursor: pointer;
+      }
+      .filter-actions button:hover { background: rgba(162,186,212,0.22); }
+      #facility-filters { max-height: 280px; overflow-y: auto; padding: 0 4px 6px; }
+      #facility-filters, #sector-legend { scrollbar-width: thin; scrollbar-color: #48596d transparent; }
+      .facility-filter { padding: 6px 4px; border-radius: 4px; cursor: pointer; }
+      .facility-filter:hover, .facility-filter:has(input:checked) { background: rgba(162,186,212,0.07); }
+      .facility-filter input { accent-color: var(--sector-color); }
+      .city-filter { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 12px; cursor: pointer; }
+      .city-filter input { accent-color: #d8e2ee; }
+      #filter-empty { border: 1px dashed rgba(162,186,212,0.3); border-radius: 6px; padding: 12px; }
 
       .panel-footnote {
         font-size: 10px;
@@ -136,10 +179,10 @@
         font-size: 11px;
       }
 
-      /* Legend: compact chip that opens on hover (or tap) */
+      /* Reference legend: compact chip that opens on click or tap. */
       #legend {
         left: 14px;
-        bottom: 14px;
+        top: 14px;
         max-width: 468px;
       }
       .legend-shell {
@@ -180,9 +223,7 @@
         transition: grid-template-rows 0.18s ease;
       }
       .legend-body > div { overflow: hidden; }
-      #legend:hover .legend-body,
       #legend.open .legend-body { grid-template-rows: 1fr; }
-      #legend:hover .chevron,
       #legend.open .chevron { transform: rotate(180deg); }
 
       .legend-inner {
@@ -250,6 +291,12 @@
         height: 16px;
         object-fit: contain;
         flex-shrink: 0;
+        mask-size: contain;
+        mask-position: center;
+        mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        -webkit-mask-position: center;
+        -webkit-mask-repeat: no-repeat;
       }
       .legend-swatch.relief {
         width: 16px;
@@ -257,29 +304,13 @@
         border-radius: 2px;
         background: linear-gradient(90deg, #6b8497 0%, #8c9e80 45%, #ad9573 75%, #d1bc9e 100%);
       }
-      .legend-size-scale {
-        display: flex;
-        align-items: flex-end;
-        gap: 10px;
-        padding: 2px 0 0 2px;
-      }
-      .legend-size-scale .dot {
-        border-radius: 50%;
-        background: rgba(77, 208, 225, 0.25);
-        border: 1px solid rgba(77, 208, 225, 0.8);
-      }
-      .legend-size-note {
-        font-size: 10px;
-        color: #6d7f95;
-        margin-top: 6px;
-        line-height: 1.4;
-      }
-
       /* Controls hint */
       #controls-hint {
         right: 14px;
+        left: 14px;
         bottom: 14px;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
         padding: 7px 11px;
@@ -308,7 +339,7 @@
         cursor: default;
       }
       .camera-readout { min-width: 86px; }
-      #reset-view,
+      #isometric,
       #top-down {
         font-family: inherit;
         font-size: 10px;
@@ -321,11 +352,20 @@
         padding: 3px 8px;
         cursor: pointer;
       }
-      #reset-view:hover,
+      #isometric:hover,
       #top-down:hover { color: #e8f0fa; background: rgba(162, 186, 212, 0.2); }
 
       @media (max-width: 900px) {
         #controls-hint .hide-narrow { display: none; }
+        #panel { flex-basis: 340px; padding: 16px 12px; }
+      }
+      @media (max-width: 640px) {
+        html, body { height: auto; overflow: auto; }
+        #layout { flex-direction: column; height: auto; }
+        #map-container { flex: none; height: 58vh; min-height: 360px; }
+        #panel { flex: none; width: 100%; max-width: none; height: auto; overflow: visible; border-left: 0; }
+        #controls-hint { gap: 7px; }
+        #controls-hint .rotate-hint, #camera-readout { display: none; }
       }
 
       /* Loading overlay */
@@ -459,14 +499,14 @@
       <div id="map-container">
         <div id="app"></div>
 
-        <!-- Legend: collapsed chip, opens on hover or tap -->
+        <!-- Reference legend -->
         <div class="map-overlay" id="legend">
           <div class="legend-shell">
             <button class="legend-toggle" id="legend-toggle" aria-expanded="false" aria-controls="legend-body">
-              <span>Legend</span>
+              <span>Reference layers</span>
               <span class="chevron">▲</span>
             </button>
-            <div class="legend-body" id="legend-body">
+            <div class="legend-body" id="legend-body" hidden>
               <div>
                 <div class="legend-inner" id="legend-inner"></div>
               </div>
@@ -480,12 +520,12 @@
           <span class="sep hide-narrow">·</span>
           <span class="hide-narrow">Scroll to zoom</span>
           <span class="sep hide-narrow">·</span>
-          <span><kbd>Shift</kbd> + click + drag to rotate &amp; tilt</span>
+          <span class="rotate-hint"><kbd>Shift</kbd> + click + drag to rotate &amp; tilt</span>
           <span class="sep">·</span>
           <span id="zoom-readout" class="zoom-readout">z --</span>
           <span id="camera-readout" class="zoom-readout camera-readout">↻ --° · ∡ --°</span>
-          <button id="top-down" title="Look straight down (tilt and bearing to 0)">Top-down</button>
-          <button id="reset-view" title="Back to the default view">Reset</button>
+          <button id="top-down" title="Look straight down">TOP-DOWN</button>
+          <button id="isometric" title="Return to the opening tilted view">ISOMETRIC</button>
         </div>
       </div>
 
@@ -494,6 +534,22 @@
           <h1>Virginia GHG Dashboard</h1>
           <span class="subtitle">2023 EPA GHGRP</span>
         </div>
+
+        <section class="card filter-card" aria-labelledby="filter-heading">
+          <h2 id="filter-heading">Map filters</h2>
+          <div id="filter-status" role="status" aria-live="polite">Loading facilities…</div>
+          <details class="filter-details">
+            <summary>Facility types<span id="filter-selection">Stationary combustion</span></summary>
+            <div class="filter-actions">
+              <button id="filter-all" type="button">All</button>
+              <button id="filter-none" type="button">None</button>
+              <button id="filter-default" type="button">Stationary only</button>
+            </div>
+            <div id="facility-filters" role="group" aria-label="Facility types"></div>
+          </details>
+          <label class="city-filter"><input type="checkbox" id="show-cities" checked /> Major city labels</label>
+          <p class="filter-note">Filters apply to the map and charts. Reference layers stay on.</p>
+        </section>
 
         <!-- Summary Stats -->
         <div class="stats-row" id="stats-row">
@@ -511,8 +567,10 @@
           </div>
         </div>
 
+        <p id="filter-empty" class="filter-note" hidden>No facility types selected. Choose a type above to show facilities and emissions.</p>
+
         <!-- Top Emitters Bar Chart -->
-        <div class="card">
+        <div class="card filtered-chart">
           <h2>Top 5 Emitters</h2>
           <div class="chart-wrap bar">
             <canvas id="chart-top-emitters"></canvas>
@@ -520,17 +578,20 @@
         </div>
 
         <!-- Emissions by Sector Doughnut -->
-        <div class="card">
+        <div class="card filtered-chart">
           <h2>Emissions by Sector</h2>
+          <p class="filter-note" style="margin: -5px 0 12px">Colors match facility icons.</p>
           <div class="chart-wrap doughnut">
             <canvas id="chart-sectors"></canvas>
           </div>
+          <div id="sector-legend" aria-label="Sector emissions in kilotons of CO2e"></div>
         </div>
 
         <div class="panel-footnote">
           Click any facility for its reported emissions history. Emissions:
           <a href="https://ghgdata.epa.gov/flight/" target="_blank" rel="noopener">EPA GHGRP FLIGHT</a>,
           reporting year 2023. Terrain: AWS Terrarium elevation tiles.
+          City locations: <a href="https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2023_Gazetteer/2023_gaz_place_51.txt" target="_blank" rel="noopener">2023 Census Gazetteer</a>.
         </div>
       </div>
     </div>

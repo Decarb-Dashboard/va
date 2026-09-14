@@ -1,10 +1,13 @@
 import {buildTerrainSurface, terrainTileCount} from './terrain.js';
+import {buildIconIndex, summarizeSectors, filterFacilities, DEFAULT_FACILITY_TYPES, FACILITY_ICON_SIZE} from './facilities.js';
 
 const {
   DeckGL,
   TerrainLayer,
   GeoJsonLayer,
   IconLayer,
+  ScatterplotLayer,
+  TextLayer,
   BitmapLayer,
   MaskExtension,
   WebMercatorViewport
@@ -15,7 +18,8 @@ const COLORS = {
   railroads: [215, 221, 230, 92],
   roads: [255, 210, 122, 120],
   places: [154, 167, 180, 60],
-  ports: [77, 208, 225, 190]
+  ports: [77, 208, 225, 190],
+  cities: [216, 226, 238, 255]
 };
 
 const LAYER_LABELS = {
@@ -36,15 +40,13 @@ const DATA_WEIGHTS = {
   pipelines: 5,
   incorporated_places: 8,
   primary_roads: 14,
-  railroads: 20
+  railroads: 20,
+  cities: 1
 };
 const TERRAIN_WEIGHT = 30;
 const RENDER_WEIGHT = 14;
 const READY_SETTLE_MS = 700;
 const READY_TIMEOUT_MS = 20000;
-
-const ICON_SIZE_MIN_PX = 20;
-const ICON_SIZE_MAX_PX = 54;
 
 // Facilities and reference layers are flat (z = 0) while the terrain mesh has
 // real elevation, so depth testing hides them behind ridges as you zoom in.
@@ -129,70 +131,6 @@ async function loadJson(path) {
 
 function formatTons(value) {
   return Number(value || 0).toLocaleString('en-US', {maximumFractionDigits: 0});
-}
-
-function normalizeSubparts(subparts) {
-  return String(subparts || '')
-    .split(',')
-    .map((part) => part.trim().toUpperCase())
-    .filter(Boolean)
-    .sort()
-    .join(',');
-}
-
-function iconNameToFile(iconName) {
-  if (typeof iconName !== 'string' || iconName.length === 0) {
-    return 'icon_v2_C.png';
-  }
-  return iconName.includes('.') ? iconName : `${iconName}.png`;
-}
-
-/* ------------------------------------------------------------------- icons */
-
-function buildIconIndex(manifest) {
-  const iconConfig = manifest.icons || {};
-  const baseDir = iconConfig.base_dir || 'geo-icons';
-  const labels = iconConfig.labels || {};
-  const defaultIconName = iconConfig.default || 'icon_v2_C';
-
-  const bySubparts = {};
-  Object.entries(iconConfig.by_subparts || {}).forEach(([subparts, iconName]) => {
-    bySubparts[normalizeSubparts(subparts)] = String(iconName);
-  });
-
-  const iconName = (subparts) => bySubparts[normalizeSubparts(subparts)] || defaultIconName;
-
-  return {
-    iconName,
-    url: (name) => `../${baseDir}/${iconNameToFile(name)}`,
-    label: (name) => labels[name] || 'Other reporting facility',
-    icon: (feature) => ({
-      url: `../${baseDir}/${iconNameToFile(iconName(feature?.properties?.subparts))}`,
-      width: 128,
-      height: 128,
-      anchorY: 128,
-      mask: false
-    })
-  };
-}
-
-/** Legend entries for the facility icons that actually appear in the data. */
-function buildIconLegend(features, iconIndex) {
-  const groups = new Map();
-  features.forEach((feature) => {
-    const name = iconIndex.iconName(feature.properties?.subparts);
-    const entry = groups.get(name) || {
-      name,
-      url: iconIndex.url(name),
-      label: iconIndex.label(name),
-      count: 0,
-      tons: 0
-    };
-    entry.count += 1;
-    entry.tons += Number(feature.properties?.ghg_quantity_metric_tons_co2e) || 0;
-    groups.set(name, entry);
-  });
-  return [...groups.values()].sort((a, b) => b.tons - a.tons);
 }
 
 /* ------------------------------------------------------------------ basemap */
@@ -324,23 +262,26 @@ function makeViewReadout(zoomRange) {
       fetchLayer('principal_ports'),
       fetchLayer('pipelines', 'Loading roads and rail…')
     ]);
-    const [placesGeoJson, roadsGeoJson, railroadsGeoJson] = await Promise.all([
+    const [placesGeoJson, roadsGeoJson, railroadsGeoJson, citiesGeoJson] = await Promise.all([
       fetchLayer('incorporated_places'),
       fetchLayer('primary_roads'),
-      fetchLayer('railroads', 'Building terrain relief…')
+      fetchLayer('railroads', 'Building terrain relief…'),
+      loadJson('./major-cities.geojson').then(data => {
+        progress.advance(DATA_WEIGHTS.cities);
+        return data;
+      })
     ]);
 
     const ghgFeatures = ghgGeoJson.features || [];
     const boundaryFeatures = boundaryGeoJson.features || [];
     const iconIndex = buildIconIndex(manifest);
-    const maxTons = Math.max(
-      1,
-      ...ghgFeatures.map((f) => Number(f.properties?.ghg_quantity_metric_tons_co2e) || 0)
-    );
+    let visibleFeatures = filterFacilities(ghgFeatures, new Set(DEFAULT_FACILITY_TYPES), iconIndex);
+    let showCities = true;
 
     // Hand the panel its data as soon as it exists; charts render while the
     // terrain is still being shaded.
     window.__ghgFeatures = ghgFeatures;
+    window.__ghgIconIndex = iconIndex;
     window.__ghgLegend = {
       layers: [
         {label: 'Terrain relief (low \u2192 high)', type: 'relief'},
@@ -349,15 +290,10 @@ function makeViewReadout(zoomRange) {
         {label: 'Primary roads', type: 'line', color: rgba(COLORS.roads)},
         {label: 'Railroads', type: 'line', color: rgba(COLORS.railroads)},
         {label: 'Incorporated places', type: 'line', color: rgba(COLORS.places)},
-        {label: 'Principal ports', type: 'circle', color: rgba(COLORS.ports)}
+        {label: 'Principal ports', type: 'circle', color: rgba(COLORS.ports)},
+        {label: 'Major cities (optional)', type: 'circle', color: rgba(COLORS.cities)}
       ],
-      icons: buildIconLegend(ghgFeatures, iconIndex),
-      sizeScale: {
-        minTons: Math.min(...ghgFeatures.map((f) => f.properties.ghg_quantity_metric_tons_co2e || 0)),
-        maxTons,
-        minPx: ICON_SIZE_MIN_PX,
-        maxPx: ICON_SIZE_MAX_PX
-      }
+      icons: summarizeSectors(ghgFeatures, iconIndex)
     };
     window.dispatchEvent(new Event('ghg-data-ready'));
 
@@ -397,6 +333,25 @@ function makeViewReadout(zoomRange) {
     /* -------------------------------------------------------------- layers */
 
     let surface = null;
+
+    // Keep city names legible at the state overview; reveal more as space
+    // opens up while zooming. All city dots remain available for hover.
+    const cityLabels = () => {
+      const container = document.getElementById('app');
+      const viewport = new WebMercatorViewport({
+        ...viewState, width: container.clientWidth, height: container.clientHeight
+      });
+      const occupied = [];
+      return citiesGeoJson.features.filter(city => {
+        const [x, y] = viewport.project(city.geometry.coordinates);
+        const halfWidth = city.properties.name.length * 3.8 + 6;
+        const box = {left: x - halfWidth, right: x + halfWidth, top: y + 2, bottom: y + 22};
+        if (occupied.some(other => box.left < other.right && box.right > other.left &&
+          box.top < other.bottom && box.bottom > other.top)) return false;
+        occupied.push(box);
+        return true;
+      });
+    };
 
     const buildLayers = () => [
       // Raster basemap path: clip the textured 3D mesh to Virginia.
@@ -528,18 +483,48 @@ function makeViewReadout(zoomRange) {
       }),
       new IconLayer({
         id: 'ghg-facilities',
-        data: ghgFeatures,
+        data: visibleFeatures,
         getPosition: (d) => d.geometry.coordinates,
         getIcon: iconIndex.icon,
-        // Icon area tracks reported emissions.
-        getSize: (d) => {
-          const tons = Math.max(Number(d.properties?.ghg_quantity_metric_tons_co2e) || 0, 0);
-          const normalized = Math.sqrt(tons) / Math.sqrt(maxTons);
-          return ICON_SIZE_MIN_PX + normalized * (ICON_SIZE_MAX_PX - ICON_SIZE_MIN_PX);
-        },
+        getColor: d => iconIndex.rgb(iconIndex.iconName(d.properties?.subparts)),
+        getSize: FACILITY_ICON_SIZE,
         sizeUnits: 'pixels',
         parameters: OVERLAY_PARAMETERS,
         pickable: true
+      }),
+      new ScatterplotLayer({
+        id: 'major-city-points',
+        data: citiesGeoJson.features,
+        visible: showCities,
+        getPosition: d => d.geometry.coordinates,
+        getRadius: 3,
+        radiusUnits: 'pixels',
+        getFillColor: COLORS.cities,
+        stroked: true,
+        getLineColor: [11, 15, 20, 255],
+        lineWidthUnits: 'pixels',
+        getLineWidth: 1,
+        parameters: OVERLAY_PARAMETERS,
+        pickable: true
+      }),
+      new TextLayer({
+        id: 'major-city-labels',
+        data: cityLabels(),
+        visible: showCities,
+        getPosition: d => d.geometry.coordinates,
+        getText: d => d.properties.name,
+        getSize: 12,
+        getColor: COLORS.cities,
+        getPixelOffset: [0, 11],
+        getTextAnchor: 'middle',
+        getAlignmentBaseline: 'center',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontWeight: 600,
+        background: true,
+        getBackgroundColor: [11, 15, 20, 210],
+        backgroundPadding: [3, 2],
+        parameters: OVERLAY_PARAMETERS,
+        pickable: false
       })
     ].filter(Boolean);
 
@@ -586,7 +571,7 @@ function makeViewReadout(zoomRange) {
       layers: buildLayers(),
       onViewStateChange: ({viewState: next}) => {
         viewState = clampToVirginia(next, bounds, zoomRange);
-        deckInstance.setProps({viewState});
+        deckInstance.setProps({viewState, layers: buildLayers()});
         showView(viewState);
         return viewState;
       },
@@ -607,6 +592,7 @@ function makeViewReadout(zoomRange) {
       },
       getTooltip: ({object, layer}) => {
         if (!object || !layer) return null;
+        if (layer.id === 'major-city-points') return {text: object.properties.name};
         if (layer.id === 'ghg-facilities') {
           const props = object.properties || {};
           const iconName = iconIndex.iconName(props.subparts);
@@ -617,6 +603,12 @@ function makeViewReadout(zoomRange) {
         const label = LAYER_LABELS[layer.id];
         return label ? {text: label} : null;
       }
+    });
+
+    window.addEventListener('ghg-filter-change', event => {
+      visibleFeatures = filterFacilities(ghgFeatures, new Set(event.detail.selectedTypes), iconIndex);
+      showCities = event.detail.showCities;
+      deckInstance.setProps({layers: buildLayers()});
     });
 
     /* --------------------------------------------------------- view controls */
@@ -632,19 +624,19 @@ function makeViewReadout(zoomRange) {
         pitch: Number(webCfg.initial_pitch ?? 0),
         bearing: Number(webCfg.initial_bearing ?? 0)
       };
-      deckInstance.setProps({viewState});
+      deckInstance.setProps({viewState, layers: buildLayers()});
       showView(viewState);
     };
 
     // Flatten to straight-down without moving the camera.
     const topDownView = () => {
       viewState = {...viewState, pitch: 0, bearing: 0};
-      deckInstance.setProps({viewState});
+      deckInstance.setProps({viewState, layers: buildLayers()});
       showView(viewState);
     };
 
     document.getElementById('top-down')?.addEventListener('click', topDownView);
-    document.getElementById('reset-view')?.addEventListener('click', resetView);
+    document.getElementById('isometric')?.addEventListener('click', resetView);
 
     // Drape the shaded relief over the mesh as soon as it has been built.
     surfacePromise.then((result) => {
@@ -666,8 +658,8 @@ function makeViewReadout(zoomRange) {
         maxZoom: zoomRange[1],
         zoom: clamp(viewState.zoom, zoomRange[0], zoomRange[1])
       };
-      deckInstance.setProps({viewState});
-      showZoom(viewState.zoom);
+      deckInstance.setProps({viewState, layers: buildLayers()});
+      showView(viewState);
     });
   } catch (error) {
     console.error(error);

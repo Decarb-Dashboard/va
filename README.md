@@ -94,14 +94,28 @@ python -m http.server 8000
 Then open `http://localhost:8000/web/` to view the interactive deck.gl map with:
 - Shaded terrain relief built in the browser from AWS Terrarium elevation tiles (no basemap API key)
 - Geo reference layers (pipelines, railroads, roads, incorporated places, ports, VA boundary), clipped to Virginia for better performance
-- GHG facilities (`IconLayer`, 2023 only, icon size scaled by emissions, click for the facility's reporting history)
-- A hover-to-open legend, a loading bar, and summary charts in the side panel
+- GHG facilities (`IconLayer`, 2023 only, uniform 28 px icons, click for the facility's reporting history)
+- Facility filters that start with only **Stationary combustion** (35 facilities). Choose individual
+  types, **All**, **None**, or **Stationary only**; the map, statistics, and both charts update together.
+- Shared category names and colors for icons, filters, charts, and facility history. Turquoise means
+  stationary combustion, white means power generation, and lavender means glass production.
+- An optional major-city layer, enabled initially, with dots and labels for 17 cities and regional
+  centers. Labels avoid overlapping as the camera moves; zoom in to reveal more names. Coordinates
+  are internal points from the [2023 Census Gazetteer for Virginia](https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2023_Gazetteer/2023_gaz_place_51.txt),
+  stored in `web/major-cities.geojson`; they are not downtown locations or a population ranking.
+- A click-to-open reference legend, a loading bar, and summary charts in the side panel.
+  All existing reference layers stay on when facility filters change.
 
-Map controls: drag to pan, scroll to zoom, **Shift + click + drag to rotate and tilt**, *Top-down*
-to look straight down, and *Reset* to return to the opening view. The controls bar reads out the
+Map controls: drag to pan, scroll to zoom, **Shift + click + drag to rotate and tilt**, **TOP-DOWN**
+to look straight down, and **ISOMETRIC** to return to the opening tilted view. The controls bar reads out the
 live zoom (level plus percentage of the allowed range), bearing and tilt, so a view worth keeping
 can be read off the map and set as `web.initial_bearing` / `web.initial_pitch` / `web.max_zoom` in
 `config.yml` (rebuild the deck assets afterwards).
+
+Category colors and filtering helpers live in `web/facilities.js`; labels and subpart combinations
+continue to come from `icons` in the generated manifest. The browser tints the existing icon masks,
+so category color changes do not require editing the PNG assets. Run the dashboard regression checks
+with `node --test tests/dashboard_filters.test.mjs`.
 
 ---
 
