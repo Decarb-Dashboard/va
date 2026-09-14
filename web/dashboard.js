@@ -1,48 +1,10 @@
 // Dashboard panel: legend, summary stats, and charts
 // Waits for map.js to expose GHG feature data via window.__ghgFeatures
 
-// Sector labels derived from EPA GHGRP subpart codes
-const SECTOR_MAP = {
-  C: 'General Combustion',
-  D: 'Power Plants',
-  HH: 'Landfills',
-  FF: 'Coal Mines',
-  W: 'Natural Gas Distribution',
-  NN: 'Natural Gas Distribution',
-  Q: 'Steel / Iron',
-  PP: 'Chemical Mfg',
-  G: 'Chemical Mfg',
-  TT: 'Industrial Processes',
-  II: 'Industrial Processes',
-  H: 'Cement',
-  AA: 'Petroleum Refining',
-  Y: 'Petroleum Refining',
-  BB: 'Silicon Carbide',
-  S: 'Lime Manufacturing',
-  X: 'Petrochemical',
-  DD: 'Electrical Equipment',
-  OO: 'Data Centers / HVAC'
-};
+import {summarizeSectors, filterFacilities, DEFAULT_FACILITY_TYPES} from './facilities.js';
 
-const SECTOR_COLORS = [
-  '#4dd0e1', '#9D00FF', '#ffd27a', '#ff6b6b',
-  '#69db7c', '#b197fc', '#ffa94d', '#74c0fc',
-  '#e599f7', '#8fa6bd', '#f783ac', '#a9e34b'
-];
-
-function classifyFacility(subparts) {
-  const parts = String(subparts || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-  // Pick the most specific subpart (not C which is generic combustion)
-  const specific = parts.find(p => p !== 'C') || parts[0] || 'C';
-  return SECTOR_MAP[specific] || 'Other';
-}
-
-const compactTons = (tons) => {
-  const value = Number(tons) || 0;
-  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
-  if (value >= 1e3) return `${Math.round(value / 1e3)}k`;
-  return String(Math.round(value));
-};
+let iconIndex;
+const selectedTypes = new Set(DEFAULT_FACILITY_TYPES);
 
 function legendRow(swatch, label, trailing) {
   const row = document.createElement('div');
@@ -74,64 +36,11 @@ function legendSection(title) {
   return {section, list};
 }
 
-/**
- * Render the map legend into the overlay chip. Everything the map draws is
- * listed: facility icon categories present in the data, the size encoding and
- * the reference layers.
- */
+/** Reference context stays visible independently of the facility filters. */
 function buildLegend(legend) {
   const host = document.getElementById('legend-inner');
   if (!host || !legend) return;
   host.innerHTML = '';
-
-  const icons = legend.icons || [];
-  const facilities = legendSection(`Facilities (${icons.reduce((n, i) => n + i.count, 0)})`);
-  if (icons.length > 10) {
-    facilities.list.classList.add('two-col');
-  }
-  icons.forEach((entry) => {
-    const swatch = document.createElement('img');
-    swatch.className = 'legend-swatch icon';
-    swatch.src = entry.url;
-    swatch.alt = '';
-    facilities.list.appendChild(legendRow(swatch, entry.label, `${entry.count}`));
-  });
-  host.appendChild(facilities.section);
-
-  const scale = legend.sizeScale;
-  if (scale) {
-    const sizing = legendSection('Icon size');
-    const row = document.createElement('div');
-    row.className = 'legend-size-scale';
-    const stops = [
-      {tons: scale.minTons, frac: 0},
-      {tons: (scale.maxTons || 0) / 8, frac: Math.sqrt(1 / 8)},
-      {tons: scale.maxTons, frac: 1}
-    ];
-    stops.forEach((stop) => {
-      const wrap = document.createElement('div');
-      wrap.style.textAlign = 'center';
-      const dot = document.createElement('div');
-      const px = Math.round((scale.minPx + stop.frac * (scale.maxPx - scale.minPx)) * 0.42);
-      dot.className = 'dot';
-      dot.style.width = `${px}px`;
-      dot.style.height = `${px}px`;
-      dot.style.margin = '0 auto 3px';
-      const label = document.createElement('div');
-      label.style.fontSize = '9px';
-      label.style.color = '#6d7f95';
-      label.textContent = compactTons(stop.tons);
-      wrap.appendChild(dot);
-      wrap.appendChild(label);
-      row.appendChild(wrap);
-    });
-    sizing.list.appendChild(row);
-    const note = document.createElement('div');
-    note.className = 'legend-size-note';
-    note.textContent = 'Icon area scales with reported tCO2e.';
-    sizing.list.appendChild(note);
-    host.appendChild(sizing.section);
-  }
 
   const layers = legendSection('Reference layers');
   (legend.layers || []).forEach((item) => {
@@ -150,24 +59,25 @@ function buildLegend(legend) {
   host.appendChild(layers.section);
 }
 
-// The legend opens on hover; a click pins it open for touch input.
+// A click opens the reference legend for mouse, keyboard, and touch input.
 const legendEl = document.getElementById('legend');
 const legendToggle = document.getElementById('legend-toggle');
 if (legendEl && legendToggle) {
   legendToggle.addEventListener('click', () => {
     const open = legendEl.classList.toggle('open');
     legendToggle.setAttribute('aria-expanded', String(open));
+    document.getElementById('legend-body').hidden = !open;
   });
 }
 
 function populateStats(features) {
   const count = features.length;
   const totalEmissions = features.reduce((sum, f) => sum + (f.properties.ghg_quantity_metric_tons_co2e || 0), 0);
-  const sectors = new Set(features.map(f => classifyFacility(f.properties.subparts)));
+  const sectors = summarizeSectors(features, iconIndex);
 
   document.getElementById('stat-facilities').textContent = count;
   document.getElementById('stat-emissions').textContent = (totalEmissions / 1e6).toFixed(1);
-  document.getElementById('stat-sectors').textContent = sectors.size;
+  document.getElementById('stat-sectors').textContent = sectors.length;
 }
 
 const TOP_EMITTER_COUNT = 5;
@@ -183,14 +93,15 @@ function buildTopEmittersChart(features) {
   });
   const data = top.map(f => (f.properties.ghg_quantity_metric_tons_co2e || 0) / 1000);
 
-  new Chart(document.getElementById('chart-top-emitters'), {
+  const canvas = document.getElementById('chart-top-emitters');
+  Chart.getChart(canvas)?.destroy();
+  new Chart(canvas, {
     type: 'bar',
     data: {
       labels,
       datasets: [{
         data,
-        backgroundColor: 'rgba(77, 208, 225, 0.7)',
-        borderColor: 'rgba(77, 208, 225, 1)',
+        backgroundColor: top.map(f => iconIndex.color(iconIndex.iconName(f.properties.subparts))),
         borderWidth: 1,
         borderRadius: 3
       }]
@@ -223,23 +134,28 @@ function buildTopEmittersChart(features) {
 }
 
 function buildSectorChart(features) {
-  const sectorTotals = {};
-  features.forEach(f => {
-    const sector = classifyFacility(f.properties.subparts);
-    sectorTotals[sector] = (sectorTotals[sector] || 0) + (f.properties.ghg_quantity_metric_tons_co2e || 0);
+  const sectors = summarizeSectors(features, iconIndex);
+  const labels = sectors.map(sector => sector.label);
+  const data = sectors.map(sector => sector.tons / 1000);
+  const host = document.getElementById('sector-legend');
+  host.replaceChildren();
+  sectors.forEach(sector => {
+    const swatch = document.createElement('span');
+    swatch.className = 'legend-swatch circle';
+    swatch.style.background = sector.color;
+    host.appendChild(legendRow(swatch, sector.label,
+      `${(sector.tons / 1000).toLocaleString(undefined, {maximumFractionDigits: 1})} kt`));
   });
 
-  const sorted = Object.entries(sectorTotals).sort((a, b) => b[1] - a[1]);
-  const labels = sorted.map(([s]) => s);
-  const data = sorted.map(([, v]) => v / 1000);
-
-  new Chart(document.getElementById('chart-sectors'), {
+  const canvas = document.getElementById('chart-sectors');
+  Chart.getChart(canvas)?.destroy();
+  new Chart(canvas, {
     type: 'doughnut',
     data: {
       labels,
       datasets: [{
         data,
-        backgroundColor: SECTOR_COLORS.slice(0, labels.length),
+        backgroundColor: sectors.map(sector => sector.color),
         borderColor: '#101520',
         borderWidth: 2
       }]
@@ -249,15 +165,7 @@ function buildSectorChart(features) {
       maintainAspectRatio: false,
       cutout: '55%',
       plugins: {
-        legend: {
-          position: 'right',
-          labels: {
-            color: '#b0bfcf',
-            font: {size: 10},
-            boxWidth: 12,
-            padding: 8
-          }
-        },
+        legend: {display: false},
         tooltip: {
           callbacks: {
             label: ctx => `${ctx.label}: ${ctx.raw.toLocaleString()} kt CO2e`
@@ -340,7 +248,7 @@ function openFacilityModal(facilityName, subparts) {
   }
 
   titleEl.textContent = facilityName;
-  subtitleEl.textContent = `Sector: ${classifyFacility(subparts)} · Subparts: ${subparts || 'N/A'}`;
+  subtitleEl.textContent = `Sector: ${iconIndex.label(iconIndex.iconName(subparts))} · Subparts: ${subparts || 'N/A'}`;
 
   // Compute stats
   const years = records.map(r => r.year);
@@ -363,6 +271,7 @@ function openFacilityModal(facilityName, subparts) {
     timelineChart = null;
   }
 
+  const color = iconIndex.color(iconIndex.iconName(subparts));
   const canvas = document.getElementById('chart-facility-timeline');
   timelineChart = new Chart(canvas, {
     type: 'line',
@@ -370,11 +279,11 @@ function openFacilityModal(facilityName, subparts) {
       labels: years,
       datasets: [{
         data: ghgValues.map(v => v / 1000),
-        borderColor: '#4dd0e1',
-        backgroundColor: 'rgba(77, 208, 225, 0.1)',
+        borderColor: color,
+        backgroundColor: `${color}1a`,
         borderWidth: 2,
         pointRadius: 4,
-        pointBackgroundColor: '#4dd0e1',
+        pointBackgroundColor: color,
         pointBorderColor: '#141a24',
         pointBorderWidth: 2,
         fill: true,
@@ -429,11 +338,74 @@ document.addEventListener('keydown', (e) => {
 // Expose click handler for map.js
 window.__onFacilityClick = openFacilityModal;
 
+function buildFilters(features) {
+  const entries = [...window.__ghgLegend.icons].sort((a, b) => a.label.localeCompare(b.label));
+  const list = document.getElementById('facility-filters');
+  list.replaceChildren();
+  entries.forEach(entry => {
+    const row = document.createElement('label');
+    row.className = 'facility-filter legend-item';
+    row.style.setProperty('--sector-color', entry.color);
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = entry.name;
+    input.checked = selectedTypes.has(entry.name);
+    input.addEventListener('change', () => {
+      if (input.checked) selectedTypes.add(entry.name);
+      else selectedTypes.delete(entry.name);
+      updateDashboard(features);
+    });
+    const swatch = document.createElement('span');
+    swatch.className = 'legend-swatch icon';
+    swatch.style.backgroundColor = entry.color;
+    swatch.style.maskImage = `url("${entry.url}")`;
+    swatch.style.webkitMaskImage = `url("${entry.url}")`;
+    const label = document.createElement('span');
+    label.textContent = entry.label;
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = entry.count;
+    row.append(input, swatch, label, count);
+    list.appendChild(row);
+  });
+
+  const selectTypes = names => {
+    selectedTypes.clear();
+    names.forEach(name => selectedTypes.add(name));
+    list.querySelectorAll('input').forEach(input => { input.checked = selectedTypes.has(input.value); });
+    updateDashboard(features);
+  };
+  document.getElementById('filter-all').addEventListener('click', () => selectTypes(entries.map(entry => entry.name)));
+  document.getElementById('filter-none').addEventListener('click', () => selectTypes([]));
+  document.getElementById('filter-default').addEventListener('click', () => selectTypes(DEFAULT_FACILITY_TYPES));
+  document.getElementById('show-cities').addEventListener('change', () => dispatchFilters());
+}
+
+function dispatchFilters() {
+  window.dispatchEvent(new CustomEvent('ghg-filter-change', {detail: {
+    selectedTypes: [...selectedTypes],
+    showCities: document.getElementById('show-cities').checked
+  }}));
+}
+
+function updateDashboard(features) {
+  const visible = filterFacilities(features, selectedTypes, iconIndex);
+  document.getElementById('filter-status').textContent = `Showing ${visible.length} of ${features.length} facilities`;
+  document.getElementById('filter-selection').textContent = selectedTypes.size === 1
+    ? iconIndex.label([...selectedTypes][0]) : `${selectedTypes.size} types selected`;
+  document.getElementById('filter-empty').hidden = visible.length > 0;
+  document.querySelectorAll('.filtered-chart').forEach(element => { element.hidden = visible.length === 0; });
+  populateStats(visible);
+  buildTopEmittersChart(visible);
+  buildSectorChart(visible);
+  dispatchFilters();
+}
+
 function init(features) {
+  iconIndex = window.__ghgIconIndex;
   buildLegend(window.__ghgLegend);
-  populateStats(features);
-  buildTopEmittersChart(features);
-  buildSectorChart(features);
+  buildFilters(features);
+  updateDashboard(features);
   loadAllYearsData();
 }
 

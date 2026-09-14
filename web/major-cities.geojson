@@ -1,0 +1,262 @@
+{
+  "type": "FeatureCollection",
+  "description": "Selected major cities and regional centers; 2023 Census Gazetteer internal points, not downtown locations or a population ranking.",
+  "source": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2023_Gazetteer/2023_gaz_place_51.txt",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Richmond",
+        "geoid": "5167000",
+        "priority": 17
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -77.476009,
+          37.531399
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Virginia Beach",
+        "geoid": "5182000",
+        "priority": 16
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -76.029142,
+          36.779525
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Norfolk",
+        "geoid": "5157000",
+        "priority": 15
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -76.244641,
+          36.923015
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Alexandria",
+        "geoid": "5101000",
+        "priority": 14
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -77.08367,
+          38.819251
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Roanoke",
+        "geoid": "5168000",
+        "priority": 13
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.958174,
+          37.278458
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Lynchburg",
+        "geoid": "5147672",
+        "priority": 12
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.195458,
+          37.399016
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Charlottesville",
+        "geoid": "5114968",
+        "priority": 11
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -78.485381,
+          38.037658
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Harrisonburg",
+        "geoid": "5135624",
+        "priority": 10
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -78.873303,
+          38.436255
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Winchester",
+        "geoid": "5186720",
+        "priority": 9
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -78.176356,
+          39.173869
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Fredericksburg",
+        "geoid": "5129744",
+        "priority": 8
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -77.486658,
+          38.299272
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Danville",
+        "geoid": "5121344",
+        "priority": 7
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.408071,
+          36.583334
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Bristol",
+        "geoid": "5109816",
+        "priority": 6
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -82.157564,
+          36.616954
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Chesapeake",
+        "geoid": "5116000",
+        "priority": 5
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -76.301788,
+          36.679376
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Newport News",
+        "geoid": "5156000",
+        "priority": 4
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -76.52198,
+          37.076136
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Hampton",
+        "geoid": "5135000",
+        "priority": 3
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -76.297293,
+          37.047961
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Suffolk",
+        "geoid": "5176432",
+        "priority": 2
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -76.634781,
+          36.697157
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Petersburg",
+        "geoid": "5161832",
+        "priority": 1
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -77.392368,
+          37.20473
+        ]
+      }
+    }
+  ]
+}
